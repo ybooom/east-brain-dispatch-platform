@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>东部智脑-运营管理综合调度平台</title>
+    <link rel="stylesheet" href="./styles.css?v=20260704-1512" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">智</div>
+          <div>
+            <div class="brand-title">东部智脑</div>
+            <div class="brand-subtitle">运营管理综合调度平台</div>
+          </div>
+        </div>
+
+        <nav class="module-nav" aria-label="功能导航">
+          <button class="nav-item active" data-view="cockpit">
+            <span class="nav-icon">⌂</span>
+            <span>首页驾驶舱</span>
+          </button>
+        </nav>
+
+        <section class="side-summary">
+          <div class="side-label">今日运营健康度</div>
+          <div class="health-ring">
+            <strong>86</strong>
+            <span>良好</span>
+          </div>
+          <div class="side-stats">
+            <div><b>8</b><span>调度专题</span></div>
+            <div><b>17</b><span>重点预警</span></div>
+          </div>
+        </section>
+
+        <nav class="utility-nav" id="utilityNav" aria-label="平台配置"></nav>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow" id="topEyebrow">数据源 · 智能分析 · 联动交互 · 科学决策 · 提质增效</p>
+            <h1 id="topTitle">东部智脑-运营管理综合调度平台</h1>
+            <p class="subtitle" id="topSubtitle">围绕目标、调度、价值三层闭环，形成大区运营管理的一屏统览、专题穿透和风险联动。</p>
+          </div>
+          <div class="top-actions">
+            <button class="icon-btn" title="刷新数据">↻</button>
+            <span class="refresh-time">数据刷新：09:45:32</span>
+            <span class="system-ok"><i></i>系统运行正常</span>
+            <button class="primary-btn">生成调度日报</button>
+          </div>
+        </header>
+
+        <section class="view active" id="cockpit">
+          <section class="cockpit-overview assistant-only">
+            <div class="overview-head">
+              <button class="assistant-pill" id="assistantEntry" type="button">
+                <span>☻</span>
+                <div>
+                  <strong>智能助手</strong>
+                  <small>为您提供智能决策支持</small>
+                </div>
+                <b>›</b>
+              </button>
+            </div>
+          </section>
+
+          <section class="module-grid" id="moduleCards"></section>
+        </section>
+
+        <section class="view" id="moduleDetail">
+          <div class="detail-toolbar">
+            <button class="ghost-btn" data-view-jump="cockpit">← 返回驾驶舱</button>
+            <div>
+              <p class="eyebrow" id="detailEyebrow">专题调度</p>
+              <h2 id="detailTitle">数字化星级调度</h2>
+            </div>
+          </div>
+
+          <section class="detail-layout">
+            <div class="detail-main">
+              <section class="metric-grid" id="detailMetrics"></section>
+              <section class="panel">
+                <div class="panel-head">
+                  <h2>专题工作方案</h2>
+                  <span class="muted">当前版本为原型口径</span>
+                </div>
+                <div class="plan-grid" id="detailPlan"></div>
+              </section>
+              <section class="panel">
+                <div class="panel-head">
+                  <h2>重点任务台账</h2>
+                  <span class="muted" id="taskCount">0 项</span>
+                </div>
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>任务事项</th>
+                        <th>责任部门</th>
+                        <th>状态</th>
+                        <th>完成率</th>
+                        <th>风险</th>
+                      </tr>
+                    </thead>
+                    <tbody id="detailRows"></tbody>
+                  </table>
+                </div>
+              </section>
+            </div>
+            <aside class="detail-aside">
+              <section class="panel dark-panel">
+                <h2>调度判断</h2>
+                <p id="detailInsight"></p>
+                <div class="mini-chart" id="miniChart"></div>
+              </section>
+              <section class="panel">
+                <div class="panel-head">
+                  <h2>风险与动作</h2>
+                </div>
+                <div class="risk-actions" id="detailActions"></div>
+              </section>
+            </aside>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <script src="./app.js?v=20260704-1512"></script>
+  </body>
+</html>
