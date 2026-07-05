@@ -404,6 +404,86 @@ const starAreaMetrics = [
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 
+const starTaskMonths = ["1月", "2月", "3月", "4月", "5月"];
+const starTaskMetricSeries = {
+  taskTotal: {
+    title: "当前任务总数",
+    shortTitle: "任务总数",
+    unit: "项",
+    note: "大区整改任务池规模，5月为当前底稿口径。",
+    values: [128, 136, 148, 162, 186],
+    ratioLabel: "任务池增长率",
+    ratios: [100, 106.3, 115.6, 126.6, 145.3],
+    tone: "neutral",
+  },
+  taskDoing: {
+    title: "进行中任务数",
+    shortTitle: "进行中",
+    unit: "项",
+    note: "仍处于执行或资料补齐阶段的任务。",
+    values: [55, 54, 49, 41, 42],
+    ratioLabel: "进行中占比",
+    ratios: [43, 39.7, 33.1, 25.3, 22.6],
+    tone: "blue",
+  },
+  taskDone: {
+    title: "已完成任务数",
+    shortTitle: "已完成",
+    unit: "项",
+    note: "已经完成整改并完成闭环的任务。",
+    values: [62, 74, 88, 103, 124],
+    ratioLabel: "完成占比",
+    ratios: [48.4, 54.4, 59.5, 63.6, 66.7],
+    tone: "green",
+  },
+  taskOverdueDone: {
+    title: "逾期完成任务数",
+    shortTitle: "逾期完成",
+    unit: "项",
+    note: "超过计划节点后完成的任务，反映延期闭环压力。",
+    values: [4, 6, 9, 12, 15],
+    ratioLabel: "逾期完成占比",
+    ratios: [3.1, 4.4, 6.1, 7.4, 8.1],
+    tone: "amber",
+  },
+  taskOverdueOpen: {
+    title: "逾期未完成任务数",
+    shortTitle: "逾期未完成",
+    unit: "项",
+    note: "已逾期且仍未闭环，需要区域和项目同步督办。",
+    values: [7, 8, 11, 18, 20],
+    ratioLabel: "逾期未完成占比",
+    ratios: [5.5, 5.9, 7.4, 11.1, 10.8],
+    tone: "red",
+  },
+};
+
+const starTaskMetricOrder = ["taskTotal", "taskDoing", "taskDone", "taskOverdueDone", "taskOverdueOpen"];
+
+function getStarTaskMetric(metricId = "taskTotal") {
+  return starTaskMetricSeries[metricId] || starTaskMetricSeries.taskTotal;
+}
+
+function formatRatio(value) {
+  return `${Number(value).toFixed(value % 1 === 0 ? 0 : 1)}%`;
+}
+
+function renderStarTaskStatusCards(activeId = "") {
+  return starTaskMetricOrder.map((metricId) => {
+    const metric = getStarTaskMetric(metricId);
+    const current = metric.values[metric.values.length - 1];
+    const ratio = metric.ratios[metric.ratios.length - 1];
+    return `
+      <article class="metric-card metric-link star-task-status-card ${metric.tone} ${metricId === activeId ? "active" : ""}" data-star-task-metric="${metricId}" role="button" tabindex="0">
+        <span>${metric.title}</span>
+        <strong>${current}</strong>
+        <small>${metricId === "taskTotal" ? metric.note : `${metric.ratioLabel} ${formatRatio(ratio)}`}</small>
+        ${metricId === "taskTotal" ? "" : `<div class="small-progress"><i style="width:${Math.min(100, ratio)}%"></i></div>`}
+      </article>
+    `;
+  }).join("");
+}
+
 const utilityModules = [
   {
     id: "data-push",
@@ -558,9 +638,11 @@ const regionMetricConfig = [
   { id: "operationScore", title: "运行质量得分", note: "运行稳定性", mode: "derived", unit: "分" },
   { id: "deviceScore", title: "设备质量得分", note: "设备完好率", mode: "derived", unit: "分" },
   { id: "dataScore", title: "数据质量得分", note: "数据完整准确", mode: "derived", unit: "分" },
-  { id: "taskTotal", title: "当前任务数", note: "区域整改任务总量", mode: "task", unit: "项" },
+  { id: "taskTotal", title: "当前任务总数", note: "区域整改任务总量", mode: "task", unit: "项" },
+  { id: "taskDoing", title: "进行中任务数", note: "仍在推进", mode: "task", unit: "项" },
   { id: "taskDone", title: "已完成任务数", note: "已完成整改任务", mode: "task", unit: "项" },
-  { id: "taskOverdue", title: "逾期任务数", note: "需重点督办", mode: "task", unit: "项" },
+  { id: "taskOverdueDone", title: "逾期完成任务数", note: "超期后完成", mode: "task", unit: "项" },
+  { id: "taskOverdueOpen", title: "逾期未完成任务数", note: "需重点督办", mode: "task", unit: "项" },
 ];
 
 const starProjects = [
@@ -765,6 +847,16 @@ function badgeClass(level) {
   if (level === "中" || level === "warn") return "warn";
   if (level === "低" || level === "good") return "good";
   return "info";
+}
+
+function safeText(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "\"": "&quot;",
+    "'": "&#39;",
+  }[char]));
 }
 
 function renderNavigation() {
@@ -1262,21 +1354,196 @@ function projectStats(project) {
   return { activeMonths: activeMonths.size, done, doing, overdue, progress };
 }
 
-function starGanttPanelMarkup() {
-  const allStats = annualStarProjects.reduce((acc, project) => {
+function annualStarTaskTotals() {
+  return annualStarProjects.reduce((acc, project) => {
     const stats = projectStats(project);
-    acc.total += (project.tasks || []).length;
+    const total = (project.tasks || []).length;
+    acc.total += total;
     acc.done += stats.done;
     acc.doing += stats.doing;
-    acc.overdue += stats.overdue;
+    acc.overdueOpen += stats.overdue;
     return acc;
-  }, { total: 0, done: 0, doing: 0, overdue: 0 });
+  }, { total: 0, doing: 0, done: 0, overdueOpen: 0 });
+}
+
+function annualTaskBoardCards(stats) {
+  const cards = [
+    { title: "任务总数", value: stats.total, note: "年度星级任务池", tone: "neutral" },
+    { title: "进行中任务数", value: stats.doing, note: `占比 ${formatRatio(stats.doing / Math.max(stats.total, 1) * 100)}`, tone: "blue" },
+    { title: "已完成任务数", value: stats.done, note: `占比 ${formatRatio(stats.done / Math.max(stats.total, 1) * 100)}`, tone: "green" },
+    { title: "逾期未完成任务数", value: stats.overdueOpen, note: `占比 ${formatRatio(stats.overdueOpen / Math.max(stats.total, 1) * 100)}`, tone: "red" },
+  ];
   return `
-    <section class="star-task-summary">
-      <article class="metric-card task-total"><span>当前任务总数</span><strong>${allStats.total}</strong><small>Sheet2 五个项目</small></article>
-      <article class="metric-card task-done"><span>已完成数</span><strong>${allStats.done}</strong><small>完成比例 ${Math.round(allStats.done / allStats.total * 100)}%</small><div class="small-progress"><i style="width:${Math.round(allStats.done / allStats.total * 100)}%"></i></div></article>
-      <article class="metric-card task-overdue"><span>逾期任务数</span><strong>${allStats.overdue}</strong><small>需重点督办</small></article>
+    <section class="panel star-task-board-entry" data-star-task-board-entry role="button" tabindex="0">
+      <div class="panel-head">
+        <div>
+          <h2>任务看板区</h2>
+          <span class="muted">点击进入区域整体情况或项目整体情况任务看板。</span>
+        </div>
+        <span class="badge info">进入任务看板 →</span>
+      </div>
+      <div class="annual-task-card-row">
+        ${cards.map((card) => `
+          <article class="metric-card star-task-status-card ${card.tone}">
+            <span>${card.title}</span>
+            <strong>${card.value}</strong>
+            <small>${card.note}</small>
+          </article>
+        `).join("")}
+      </div>
     </section>
+  `;
+}
+
+function mockTaskBoardRows() {
+  return regionRankingRows.map((row, index) => {
+    const total = Math.max(8, Math.round(row.targetNoPay * 1.8 + row.quant.may * 0.9 + (index % 4)));
+    const done = Math.min(total, Math.max(1, Math.round(total * clampNumber(row.accept.may / Math.max(row.quant.may, 1), 0.34, 0.88))));
+    const overdueOpen = Math.max(0, Math.round((total - done) * clampNumber(0.16 + Math.max(0, row.targetPay - row.payback.may) / Math.max(row.targetPay, 1) * 0.28, 0.08, 0.45)));
+    const overdueDone = Math.max(0, Math.round(done * clampNumber(0.04 + Math.max(0, row.payback.mom) * 0.01, 0.02, 0.15)));
+    return {
+      rank: index + 1,
+      region: row.region,
+      itemName: row.region,
+      total,
+      done,
+      overdueDone,
+      overdueOpen,
+      doneRate: done / Math.max(total, 1) * 100,
+      overdueOpenRate: overdueOpen / Math.max(total, 1) * 100,
+    };
+  });
+}
+
+function projectTaskBoardRows(regionName = "枣庄区域公司") {
+  const projects = projectRegionCatalog[regionName] || [];
+  return projects.map((project, index) => {
+    const seed = projectHash(regionName, project);
+    const total = 5 + (seed % 8) + Math.floor(index / 2);
+    const done = Math.min(total, Math.max(1, Math.round(total * (0.42 + (seed % 35) / 100))));
+    const overdueOpen = Math.max(0, Math.round((total - done) * (0.18 + (seed % 16) / 100)));
+    const overdueDone = Math.max(0, Math.round(done * (0.04 + (seed % 10) / 100)));
+    return {
+      rank: index + 1,
+      region: regionName,
+      itemName: project,
+      total,
+      done,
+      overdueDone,
+      overdueOpen,
+      doneRate: done / Math.max(total, 1) * 100,
+      overdueOpenRate: overdueOpen / Math.max(total, 1) * 100,
+    };
+  });
+}
+
+function taskBoardCell(row, key, mode) {
+  if (mode === "rate") {
+    const rateMap = {
+      total: "100%",
+      done: formatRatio(row.doneRate),
+      overdueDone: formatRatio(row.overdueDone / Math.max(row.total, 1) * 100),
+      overdueOpen: formatRatio(row.overdueOpenRate),
+    };
+    return rateMap[key];
+  }
+  return row[key];
+}
+
+function taskBoardTone(row) {
+  if (row.overdueOpenRate >= 22) return "risk";
+  if (row.doneRate >= 70 && row.overdueOpenRate <= 10) return "good";
+  return "warn";
+}
+
+function renderTaskBoardTable(rows, view, mode) {
+  return `
+    <div class="star-task-board-table">
+      <div class="task-board-head">
+        <span>通报</span>
+        <span>${view === "project" ? "项目" : "区域"}</span>
+        <span>任务总数</span>
+        <span>已完成任务数</span>
+        <span>逾期完成任务数</span>
+        <span>逾期未完成任务数</span>
+      </div>
+      ${rows.map((row, index) => `
+        <div class="task-board-row ${taskBoardTone(row)}">
+          <b>${index + 1}</b>
+          <strong>${row.itemName}</strong>
+          <span>${taskBoardCell(row, "total", mode)}</span>
+          <span>${taskBoardCell(row, "done", mode)}</span>
+          <span>${taskBoardCell(row, "overdueDone", mode)}</span>
+          <span>${taskBoardCell(row, "overdueOpen", mode)}</span>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function starTaskBoardMarkup(view = "region", mode = "count", rank = "doneRate", regionName = "枣庄区域公司") {
+  const isProject = view === "project";
+  const rawRows = isProject ? projectTaskBoardRows(regionName) : mockTaskBoardRows();
+  const rows = [...rawRows].sort((a, b) => rank === "overdueOpenRate" ? b.overdueOpenRate - a.overdueOpenRate : b.doneRate - a.doneRate);
+  return `
+    <section class="panel star-task-board-page">
+      <div class="metric-drill-head">
+        <button class="ghost-btn" data-star-view="gantt" type="button">← 返回年度任务</button>
+        <div>
+          <h2>年度任务看板</h2>
+          <p class="muted">${isProject ? "按区域筛选后查看项目任务结构。" : "20个区域年度任务闭环排名与逾期结构。"}</p>
+        </div>
+        <span class="badge info">任务看板</span>
+      </div>
+      <div class="task-board-toolbar">
+        <div class="star-report-actions compact">
+          <button class="star-report-btn ${!isProject ? "active" : ""}" data-star-task-board-view="region" type="button">区域整体情况</button>
+          <button class="star-report-btn ${isProject ? "active" : ""}" data-star-task-board-view="project" type="button">项目整体情况</button>
+        </div>
+        <div class="task-board-filters">
+          ${isProject ? `
+            <label>筛选区域
+              <select id="starTaskBoardRegionSelect">
+                ${Object.keys(projectRegionCatalog).map((region) => `<option value="${region}" ${region === regionName ? "selected" : ""}>${region}</option>`).join("")}
+              </select>
+            </label>
+          ` : ""}
+          <label>展示口径
+            <select id="starTaskBoardMode">
+              <option value="count" ${mode === "count" ? "selected" : ""}>数量</option>
+              <option value="rate" ${mode === "rate" ? "selected" : ""}>比例</option>
+            </select>
+          </label>
+          <label>排名依据
+            <select id="starTaskBoardRank">
+              <option value="doneRate" ${rank === "doneRate" ? "selected" : ""}>按已完成比例</option>
+              <option value="overdueOpenRate" ${rank === "overdueOpenRate" ? "selected" : ""}>按逾期未完成比例</option>
+            </select>
+          </label>
+        </div>
+      </div>
+      ${renderTaskBoardTable(rows, view, mode)}
+    </section>
+  `;
+}
+
+function starGanttPanelMarkup() {
+  const allStats = annualStarTaskTotals();
+  return `
+    <section class="panel star-task-interaction">
+      <div class="panel-head">
+        <div>
+          <h2>任务交互</h2>
+          <span class="muted">围绕任务填报、进度更新和任务审核形成闭环入口。</span>
+        </div>
+      </div>
+      <div class="star-task-interaction-grid">
+        <button data-star-task-interaction="fill" type="button"><span>任务填报</span><strong>填报入口</strong><small>项目发起整改任务</small></button>
+        <button data-star-task-interaction="progress" type="button"><span>任务进度更新</span><strong>进度入口</strong><small>按节点更新完成情况</small></button>
+        <button data-star-task-interaction="audit" type="button"><span>任务审核</span><strong>审核入口</strong><small>区域与大区审核闭环</small></button>
+      </div>
+    </section>
+    ${annualTaskBoardCards(allStats)}
     <section class="panel star-gantt-panel">
       <div class="panel-head">
         <h2>年度星级任务进度看板</h2>
@@ -1321,6 +1588,83 @@ function starGanttPanelMarkup() {
     </section>
     <section class="panel month-drilldown" id="monthDrilldown">
       <div class="empty-drill">点击年度甘特图中的任一进度条，进入该项目整体进度页。</div>
+    </section>
+  `;
+}
+
+function starTaskMetricAnalysisMarkup(metricId) {
+  const metric = getStarTaskMetric(metricId);
+  const maxValue = Math.max(...metric.values);
+  const maxRatio = Math.max(...metric.ratios, 1);
+  const current = metric.values[metric.values.length - 1];
+  const previous = metric.values[metric.values.length - 2];
+  const currentRatio = metric.ratios[metric.ratios.length - 1];
+  const previousRatio = metric.ratios[metric.ratios.length - 2];
+  const delta = current - previous;
+  const ratioDelta = Number((currentRatio - previousRatio).toFixed(1));
+  const linePoints = metric.ratios.map((value, index) => ({
+    left: metric.ratios.length === 1 ? 0 : (index / (metric.ratios.length - 1)) * 100,
+    bottom: (value / maxRatio) * 82 + 8,
+    value,
+  }));
+  return `
+    <section class="panel star-task-metric-panel">
+      <div class="metric-drill-head">
+        <button class="ghost-btn" data-star-view="area" type="button">← 返回大区整体情况</button>
+        <div>
+          <h2>${metric.title}月度变化</h2>
+          <p class="muted">当前展示 1月到5月的任务数量与占比变化，5月为当前底稿口径。</p>
+        </div>
+        <span class="badge info">任务指标</span>
+      </div>
+      <div class="task-trend-summary">
+        <article class="metric-hero-card">
+          <span>5月当前值</span>
+          <strong>${current}<em>${metric.unit}</em></strong>
+          <p>${metric.note}</p>
+          <div class="metric-delta-row"><b>${delta >= 0 ? "+" : ""}${delta} 较4月</b><b>全年趋势追踪</b></div>
+        </article>
+        <article class="metric-analysis-card">
+          <h3>结构判断</h3>
+          <p>${metricId === "taskOverdueOpen" ? "逾期未完成占比仍处于高位，需要在项目通报中锁定责任人和预计完成节点。" : metricId === "taskDone" ? "完成数量和完成占比同步提升，说明任务池闭环速度正在追上新增任务节奏。" : "建议同时查看数量和占比，判断是任务池整体扩大，还是某类状态在结构中占比异常。"}</p>
+          <div class="metric-focus-list"><span>${metric.ratioLabel}</span><span>${formatRatio(currentRatio)}</span><span>${ratioDelta >= 0 ? "+" : ""}${ratioDelta}pct 较4月</span></div>
+        </article>
+      </div>
+      <div class="task-trend-grid">
+        <article class="task-trend-card">
+          <div class="panel-head"><h3>任务数量变化</h3><span class="muted">1月-5月</span></div>
+          <div class="metric-bar-chart star-task-month-chart">
+            ${metric.values.map((value, index) => `
+              <div class="metric-bar-item">
+                <b>${value}</b>
+                <i class="${metric.tone}" style="height:${Math.max(16, (value / maxValue) * 100)}%"></i>
+                <span>${starTaskMonths[index]}</span>
+              </div>
+            `).join("")}
+          </div>
+        </article>
+        <article class="task-trend-card">
+          <div class="panel-head"><h3>${metric.ratioLabel}</h3><span class="muted">结构占比</span></div>
+          <div class="task-ratio-chart">
+            <div class="task-ratio-line">
+              ${linePoints.map((point, index) => `
+                <i style="left:${point.left}%; bottom:${point.bottom}%">
+                  <b>${formatRatio(point.value)}</b>
+                  <em>${starTaskMonths[index]}</em>
+                </i>
+              `).join("")}
+              ${linePoints.slice(1).map((point, index) => {
+                const prev = linePoints[index];
+                const width = point.left - prev.left;
+                const height = point.bottom - prev.bottom;
+                const angle = Math.atan2(height, width) * 180 / Math.PI;
+                const length = Math.sqrt(width * width + height * height);
+                return `<span style="left:${prev.left}%; bottom:${prev.bottom}%; width:${length}%; transform:rotate(${angle}deg)"></span>`;
+              }).join("")}
+            </div>
+          </div>
+        </article>
+      </div>
     </section>
   `;
 }
@@ -1404,8 +1748,25 @@ function renderAreaBulletin(sortMode = "ytd") {
   `;
 }
 
+function starAreaReportMarkup(activeReport = "", selectedRegion = "") {
+  const reportBody = activeReport === "region"
+    ? `<div id="areaBulletinContent">${renderAreaBulletin("ytd")}</div>`
+    : activeReport === "project"
+      ? supervisionProgressMarkup(selectedRegion, false)
+      : `<section class="panel star-report-empty"><strong>请选择通报类型</strong><span>点击“区域通报”查看20个区域排名，点击“项目通报”查看需整改项目清单。</span></section>`;
+  return `
+    <section class="star-report-shell">
+      <div class="star-report-actions">
+        <button class="star-report-btn ${activeReport === "region" ? "active" : ""}" data-star-report="region" type="button">区域通报</button>
+        <button class="star-report-btn ${activeReport === "project" ? "active" : ""}" data-star-report="project" type="button">项目通报</button>
+      </div>
+      <div id="starReportContent">${reportBody}</div>
+    </section>
+  `;
+}
+
 function starAreaViewMarkup() {
-  return `<div id="areaBulletinContent">${renderAreaBulletin("ytd")}</div>`;
+  return starAreaReportMarkup();
 }
 
 function renderStarMetricCards() {
@@ -1499,6 +1860,506 @@ function starMetricAnalysisMarkup(metricId) {
   `;
 }
 
+const starTaskInteractionTabs = [
+  { id: "fill", title: "任务填报", desc: "发起整改任务，填写基础信息、资源需求与附件。", accent: "cyan" },
+  { id: "progress", title: "任务进度更新", desc: "更新任务进度、本周反馈、风险问题和过程资料。", accent: "green" },
+  { id: "audit", title: "任务审核", desc: "审核提报内容，确认进度，处理退回与转交复核。", accent: "orange" },
+];
+
+const starTaskWorkflowRows = [
+  { id: "st-001", name: "单县水厂星级整改", type: "星级整改任务", region: "鲁西区域", project: "单县水厂", applicant: "马超", owner: "区域负责人", executor: "项目执行人", status: "进行中", auditStatus: "待审核", phase: "整改推进", due: "2026-06-30", submitTime: "2026-06-18 09:42", progress: 42, weekDone: 3, issues: 2, risks: 1, priority: "重点", summary: "验收+量化星级较目标仍有差距，需补齐现场整改、资料证据和区域复核记录。" },
+  { id: "st-002", name: "曲阜嘉诚资料补齐", type: "资料归档任务", region: "济宁区域", project: "曲阜嘉诚", applicant: "刘洋", owner: "资料专员", executor: "项目执行人", status: "进行中", auditStatus: "已退回", phase: "资料补齐", due: "2026-06-24", submitTime: "2026-06-17 16:30", progress: 55, weekDone: 2, issues: 3, risks: 1, priority: "紧急", summary: "星级资料缺少关键过程证据，需补齐台账、照片和复核说明。" },
+  { id: "st-003", name: "东营城北现场复核", type: "验收补充任务", region: "东营滨州区域", project: "东营城北", applicant: "周明", owner: "运营负责人", executor: "现场负责人", status: "需协调", auditStatus: "待审核", phase: "区域复核", due: "2026-06-28", submitTime: "2026-06-16 14:20", progress: 68, weekDone: 4, issues: 1, risks: 1, priority: "重点", summary: "现场复核照片和设备维护记录需重新确认，区域需补充审核意见。" },
+  { id: "st-004", name: "青岛高新区回款说明", type: "回款说明任务", region: "青岛区域", project: "青岛高新区", applicant: "赵敏", owner: "经营负责人", executor: "回款负责人", status: "进行中", auditStatus: "待审核", phase: "销项归档", due: "2026-06-26", submitTime: "2026-06-15 11:05", progress: 76, weekDone: 5, issues: 1, risks: 0, priority: "普通", summary: "回款口径影响星级折算，需补充回款进度说明和预计完成时间。" },
+  { id: "st-005", name: "湖州光正月度归档", type: "资料归档任务", region: "杭湖区域", project: "湖州光正", applicant: "陈敏", owner: "资料专员", executor: "区域负责人", status: "已完成", auditStatus: "已通过", phase: "销项归档", due: "2026-06-20", submitTime: "2026-06-14 10:15", progress: 100, weekDone: 6, issues: 0, risks: 0, priority: "普通", summary: "资料已完成归档，区域审核通过后进入年度任务池。" },
+  { id: "st-006", name: "玄武水厂星级复核", type: "星级整改任务", region: "鲁西区域", project: "玄武水厂", applicant: "李磊", owner: "区域负责人", executor: "项目执行人", status: "逾期", auditStatus: "已退回", phase: "整改推进", due: "2026-06-12", submitTime: "2026-06-12 17:50", progress: 35, weekDone: 1, issues: 4, risks: 2, priority: "紧急", summary: "整改进度滞后，需补充责任拆解、现场证据和延期原因。" },
+];
+
+function starTaskInteractionNav(activeType) {
+  return `
+    <div class="star-task-workflow-cards">
+      ${starTaskInteractionTabs.map((tab) => `
+        <button class="${tab.id === activeType ? "active" : ""} ${tab.accent}" data-star-task-interaction="${tab.id}" type="button">
+          <i>${tab.id === "fill" ? "□" : tab.id === "progress" ? "↻" : "✓"}</i>
+          <span>${tab.title}</span>
+          <small>${tab.desc}</small>
+        </button>
+      `).join("")}
+    </div>
+  `;
+}
+
+function starTaskRegions() {
+  return [...new Set(starTaskWorkflowRows.map((row) => row.region))];
+}
+
+function starTaskProjects(region = "全部区域") {
+  const rows = region === "全部区域" ? starTaskWorkflowRows : starTaskWorkflowRows.filter((row) => row.region === region);
+  return [...new Set(rows.map((row) => row.project))];
+}
+
+function starTaskOwners() {
+  return [...new Set(starTaskWorkflowRows.map((row) => row.owner))];
+}
+
+function selectedAttr(value, selected) {
+  return value === selected ? "selected" : "";
+}
+
+function starTaskFilterValues(scope = "progress") {
+  const prefix = scope === "audit" ? "audit" : "progress";
+  return {
+    keyword: $(`#star-${prefix}-task-name`)?.value.trim() || "",
+    region: $(`#star-${prefix}-region`)?.value || "全部区域",
+    project: $(`#star-${prefix}-project`)?.value || "全部项目",
+    owner: $(`#star-${prefix}-owner`)?.value || "全部负责人",
+  };
+}
+
+function filterStarTaskRows(filters = {}) {
+  const keyword = (filters.keyword || "").trim();
+  return starTaskWorkflowRows.filter((row) => {
+    const matchKeyword = !keyword || row.name.includes(keyword) || row.project.includes(keyword);
+    const matchRegion = !filters.region || filters.region === "全部区域" || row.region === filters.region;
+    const matchProject = !filters.project || filters.project === "全部项目" || row.project === filters.project;
+    const matchOwner = !filters.owner || filters.owner === "全部负责人" || row.owner === filters.owner;
+    return matchKeyword && matchRegion && matchProject && matchOwner;
+  });
+}
+
+function renderStarTaskProjectOptions(region = "全部区域", selectedProject = "全部项目") {
+  const projects = starTaskProjects(region);
+  return `<option ${selectedAttr("全部项目", selectedProject)}>全部项目</option>${projects.map((project) => `<option ${selectedAttr(project, selectedProject)}>${project}</option>`).join("")}`;
+}
+
+function starTaskFilterPanelMarkup(scope = "progress", filters = {}) {
+  const prefix = scope === "audit" ? "audit" : "progress";
+  const selectedRegion = filters.region || "全部区域";
+  const selectedProject = filters.project || "全部项目";
+  return `
+    <section class="task-form-section star-task-filter-panel">
+      <div class="section-title">
+        <b>任务筛选</b>
+        <span>输入任务名称或选择区域、项目、负责人后，下方任务自动刷新</span>
+      </div>
+      <div class="task-form-grid four-filter">
+        <label class="task-field">
+          <span>任务名称</span>
+          <input id="star-${prefix}-task-name" data-star-task-filter="${scope}" value="${filters.keyword || ""}" placeholder="可输入任务名称筛选" />
+        </label>
+        <label class="task-field">
+          <span>区域</span>
+          <select id="star-${prefix}-region" data-star-task-filter="${scope}">
+            <option ${selectedAttr("全部区域", selectedRegion)}>全部区域</option>
+            ${starTaskRegions().map((region) => `<option ${selectedAttr(region, selectedRegion)}>${region}</option>`).join("")}
+          </select>
+        </label>
+        <label class="task-field">
+          <span>项目</span>
+          <select id="star-${prefix}-project" data-star-task-filter="${scope}">
+            ${renderStarTaskProjectOptions(selectedRegion, selectedProject)}
+          </select>
+        </label>
+        <label class="task-field">
+          <span>负责人</span>
+          <select id="star-${prefix}-owner" data-star-task-filter="${scope}">
+            <option ${selectedAttr("全部负责人", filters.owner || "全部负责人")}>全部负责人</option>
+            ${starTaskOwners().map((owner) => `<option ${selectedAttr(owner, filters.owner)}>${owner}</option>`).join("")}
+          </select>
+        </label>
+      </div>
+    </section>
+  `;
+}
+
+function starProgressTaskListMarkup(rows, activeId) {
+  return `
+    <section class="panel star-progress-task-list">
+      <div class="panel-head">
+        <h2>筛选结果</h2>
+        <span class="muted">${rows.length} 项任务</span>
+      </div>
+      <div class="star-progress-task-items">
+        ${rows.map((row) => `
+          <button class="${row.id === activeId ? "active" : ""}" data-star-progress-task="${row.id}" type="button">
+            <span><b>${row.name}</b><small>${row.region} · ${row.project}</small></span>
+            <em>${row.status}</em>
+            <strong>${row.progress}%</strong>
+          </button>
+        `).join("") || `<div class="empty-state">暂无匹配任务</div>`}
+      </div>
+    </section>
+  `;
+}
+
+function starProgressDynamicMarkup(filters = {}, activeId = "") {
+  const rows = filterStarTaskRows(filters);
+  const activeTask = rows.find((row) => row.id === activeId) || rows[0] || starTaskWorkflowRows[0];
+  return `
+    ${starProgressTaskListMarkup(rows, activeTask?.id)}
+    <section class="panel star-progress-hero">
+      <div>
+        <span class="badge info">${activeTask.status}</span>
+        <h2>${activeTask.name}</h2>
+        <p class="muted">${activeTask.region} · ${activeTask.project} · 当前阶段：${activeTask.phase}；计划 ${activeTask.due} 完成。</p>
+      </div>
+      <div class="progress-ring-mini"><strong>${activeTask.progress}%</strong><span>整体进度</span></div>
+    </section>
+    <section class="star-progress-cards">
+      <article><span>本周完成</span><strong>${activeTask.weekDone}</strong><small>任务事项</small></article>
+      <article><span>待处理问题</span><strong>${activeTask.issues}</strong><small>需协调</small></article>
+      <article><span>风险预警</span><strong>${activeTask.risks}</strong><small>${activeTask.risks ? "中风险" : "暂无风险"}</small></article>
+    </section>
+    <section class="task-form-section">
+      <div class="section-title">
+        <b>本次进度更新</b>
+        <span>更新任务进展、问题、下周计划和附件</span>
+      </div>
+      <div class="task-form-grid three-cols">
+        <label class="task-field"><span>更新日期 <em>*</em></span><input type="date" value="2026-06-15" /></label>
+        <label class="task-field"><span>当前阶段 <em>*</em></span><select><option selected>${activeTask.phase}</option><option>任务拆解</option><option>整改推进</option><option>区域复核</option><option>销项归档</option></select></label>
+        <label class="task-field"><span>任务状态 <em>*</em></span><select><option selected>${activeTask.status}</option><option>进行中</option><option>已完成</option><option>逾期</option><option>需协调</option></select></label>
+        <label class="task-field wide progress-slider-field">
+          <span>当前进度 <em>*</em></span>
+          <div class="progress-slider-box">
+            <input data-star-progress-range type="range" min="0" max="100" value="${activeTask.progress}" />
+            <input data-star-progress-value value="${activeTask.progress}%" />
+          </div>
+        </label>
+        <label class="task-field wide"><span>本周完成情况 <em>*</em></span><textarea>${activeTask.summary}</textarea></label>
+        <label class="task-field"><span>存在问题 / 风险</span><textarea>${activeTask.issues ? "部分材料或现场证据仍需补充，需区域协同确认。" : "暂无新增问题。"}</textarea></label>
+        <label class="task-field"><span>下周计划</span><textarea>完成资料复核、区域确认和月度归档。</textarea></label>
+      </div>
+    </section>
+    <section class="panel star-week-gantt">
+      <div class="panel-head"><h2>子任务进度明细</h2><span class="muted">按周跟踪</span></div>
+      <div class="star-week-table">
+        <div><b>子任务</b><b>第1周</b><b>第2周</b><b>第3周</b><b>第4周</b><b>进度</b></div>
+        ${["方案制定", "资料补齐", "现场复核", "销项归档"].map((name, index) => {
+          const doneWeeks = Math.min(4, Math.ceil(activeTask.progress / 25));
+          return `
+            <div>
+              <input value="${name}" />
+              ${Array.from({ length: 4 }, (_, week) => {
+                const cls = week < doneWeeks ? (activeTask.progress >= 100 ? "done" : "doing") : "idle";
+                return `
+                  <select class="${cls}">
+                    <option ${cls === "idle" ? "selected" : ""}>未开始</option>
+                    <option ${cls === "doing" ? "selected" : ""}>进行中</option>
+                    <option ${cls === "done" ? "selected" : ""}>已完成</option>
+                    <option>逾期</option>
+                  </select>
+                `;
+              }).join("")}
+              <input value="${Math.max(0, Math.min(100, activeTask.progress - index * 12))}%" />
+            </div>
+          `;
+        }).join("")}
+      </div>
+    </section>
+    <div class="star-task-footer">
+      <button class="ghost-btn" type="button">保存更新</button>
+      <button class="primary-btn" type="button">提交更新</button>
+    </div>
+  `;
+}
+
+function updateStarProgressWorkspace(activeId = "") {
+  const filters = starTaskFilterValues("progress");
+  const projectSelect = $("#star-progress-project");
+  if (projectSelect) {
+    const currentProject = starTaskProjects(filters.region).includes(filters.project) ? filters.project : "全部项目";
+    projectSelect.innerHTML = renderStarTaskProjectOptions(filters.region, currentProject);
+    filters.project = projectSelect.value;
+  }
+  const target = $("#starProgressDynamic");
+  if (target) target.innerHTML = starProgressDynamicMarkup(filters, activeId);
+}
+
+function starTaskFillMarkup() {
+  const regions = starTaskRegions();
+  const selectedRegion = regions[0];
+  const projects = starTaskProjects(selectedRegion);
+  return `
+    <div class="star-task-workspace-grid full-width">
+      <div class="star-task-main-form">
+        <section class="task-form-section">
+          <div class="section-title">
+            <b>基本信息</b>
+            <span>任务进入年度池前的基础口径</span>
+          </div>
+          <div class="task-form-grid four-cols">
+            <label class="task-field">
+              <span>任务名称 <em>*</em></span>
+              <input value="5月星级短板整改" maxlength="50" />
+            </label>
+            <label class="task-field">
+              <span>任务类型 <em>*</em></span>
+              <select><option>星级整改任务</option><option>验收补充任务</option><option>回款说明任务</option><option>资料归档任务</option></select>
+            </label>
+            <label class="task-field">
+              <span>所属区域 <em>*</em></span>
+              <select id="starFillRegionSelect">${regions.map((item) => `<option>${item}</option>`).join("")}</select>
+            </label>
+            <label class="task-field">
+              <span>所属项目 <em>*</em></span>
+              <select id="starFillProjectSelect">${projects.map((item) => `<option>${item}</option>`).join("")}</select>
+            </label>
+            <label class="task-field">
+              <span>责任人 <em>*</em></span>
+              <input value="区域负责人" />
+            </label>
+            <label class="task-field">
+              <span>执行人 <em>*</em></span>
+              <input value="项目执行人" />
+            </label>
+            <label class="task-field">
+              <span>任务优先级 <em>*</em></span>
+              <select><option>重点</option><option>紧急</option><option>普通</option></select>
+            </label>
+            <label class="task-field">
+              <span>计划完成时间 <em>*</em></span>
+              <input type="date" value="2026-06-30" />
+            </label>
+          </div>
+        </section>
+
+        <section class="task-form-section">
+          <div class="section-title">
+            <b>任务内容</b>
+            <span>说明问题来源、整改动作和验收目标</span>
+          </div>
+          <div class="task-form-grid two-cols">
+            <label class="task-field wide">
+              <span>任务背景 <em>*</em></span>
+              <textarea placeholder="描述触发任务的指标、项目短板、区域复核意见或大区通报要求。">验收+量化星级较目标仍有差距，需补齐资料、现场整改和复核说明。</textarea>
+            </label>
+            <label class="task-field">
+              <span>整改措施 <em>*</em></span>
+              <textarea placeholder="填写整改动作、证据要求和责任分工。">完成问题清单拆解，补充过程资料，按周反馈整改进度。</textarea>
+            </label>
+            <label class="task-field">
+              <span>完成目标 <em>*</em></span>
+              <textarea placeholder="填写任务完成后应达到的结果。">6月底前完成区域复核并纳入星级月度归档。</textarea>
+            </label>
+          </div>
+        </section>
+
+        <section class="task-form-section">
+          <div class="section-title">
+            <b>资源与任务</b>
+            <span>需要跨部门协调时自动补充协助信息</span>
+          </div>
+          <div class="task-form-grid three-cols">
+            <label class="task-field">
+              <span>是否需要资源协调 <em>*</em></span>
+              <select id="starResourceNeed">
+                <option>否</option>
+                <option>是</option>
+              </select>
+            </label>
+            <label class="task-field">
+              <span>预计开始时间 <em>*</em></span>
+              <input type="date" value="2026-06-08" />
+            </label>
+            <label class="task-field">
+              <span>任务节点 <em>*</em></span>
+              <select><option>任务拆解</option><option>整改推进</option><option>区域复核</option><option>销项归档</option></select>
+            </label>
+          </div>
+          <div class="resource-fields star-resource-fields" data-star-resource-fields>
+            <label class="task-field wide">
+              <span>资源需求 <em>*</em></span>
+              <textarea rows="3" placeholder="请说明需要预算、设备、自控、工艺或其他资源协调的具体事项。"></textarea>
+            </label>
+            <label class="task-field">
+              <span>协助人 <em>*</em></span>
+              <input placeholder="请选择或填写协助人" />
+            </label>
+            <label class="task-field">
+              <span>协助人角色 <em>*</em></span>
+              <select>
+                <option>预算管理人</option>
+                <option>设备管理人</option>
+                <option>自控管理人</option>
+                <option>工艺管理人</option>
+                <option>资源协调人</option>
+              </select>
+            </label>
+          </div>
+        </section>
+
+        <section class="task-form-section compact">
+          <div class="section-title">
+            <b>附件与子任务</b>
+            <span>过程证据、复核记录和周任务拆解</span>
+          </div>
+          <div class="star-upload-grid">
+            <div><b>整改方案</b><span>PDF / Word / PPT</span></div>
+            <div><b>现场照片</b><span>JPG / PNG</span></div>
+            <div><b>数据底稿</b><span>Excel / CSV</span></div>
+          </div>
+          <div class="star-subtask-table">
+            <div><span>子任务</span><span>负责人</span><span>计划节点</span><span>状态</span><span>操作</span></div>
+            ${["问题拆解", "资料补齐", "现场复核", "销项归档"].map((name, index) => `
+              <div>
+                <input value="${name}" />
+                <input value="${index % 2 ? "项目执行人" : "区域负责人"}" />
+                <input value="6月${8 + index * 5}日" />
+                <select><option ${index === 0 ? "selected" : ""}>已完成</option><option ${index !== 0 ? "selected" : ""}>待推进</option><option>进行中</option><option>逾期</option></select>
+                <button class="text-btn" type="button">删除</button>
+              </div>
+            `).join("")}
+          </div>
+          <button class="task-add-row-btn" type="button">+ 新建子任务</button>
+        </section>
+
+        <div class="star-task-footer">
+          <button class="ghost-btn" type="button">暂存</button>
+          <button class="primary-btn" type="button">提交提报</button>
+        </div>
+      </div>
+      ${starTaskGuidanceMarkup("fill")}
+    </div>
+  `;
+}
+
+function starTaskGuidanceMarkup(type) {
+  const copy = {
+    fill: ["提报说明", "提报信息将进入区域审核，审核通过后进入年度任务池；资料不完整或责任不清晰会被退回。"],
+    progress: ["更新说明", "先通过区域、项目和负责人筛选到具体任务，再填报当前完成度、阶段反馈、问题风险和下周计划。"],
+    audit: ["审核说明", "审核重点是信息完整性、时间合理性、风险说明、附件齐全和是否满足进入年度任务池条件。"],
+  }[type] || ["任务说明", "围绕提报、更新、审核形成任务闭环。"];
+  return `
+    <section class="star-task-guidance">
+      <article>
+        <h3>${copy[0]}</h3>
+        <p>${copy[1]}</p>
+      </article>
+      <article>
+        <h3>流程节点</h3>
+        <div class="star-step-list horizontal">
+          <span><b>1</b>项目提报</span>
+          <span><b>2</b>区域审核</span>
+          <span><b>3</b>大区确认</span>
+          <span><b>4</b>进入年度任务</span>
+        </div>
+      </article>
+    </section>
+  `;
+}
+
+function starTaskProgressMarkup() {
+  const filters = { region: "全部区域", project: "全部项目", owner: "全部负责人", keyword: "" };
+  return `
+    <div class="star-progress-layout">
+      ${starTaskFilterPanelMarkup("progress", filters)}
+      <div id="starProgressDynamic">${starProgressDynamicMarkup(filters)}</div>
+      ${starTaskGuidanceMarkup("progress")}
+    </div>
+  `;
+}
+
+function starTaskAuditMarkup(status = "全部", selectedId = "") {
+  const auditRows = status === "全部" ? starTaskWorkflowRows : starTaskWorkflowRows.filter((row) => row.auditStatus === status);
+  const activeTask = auditRows.find((row) => row.id === selectedId) || auditRows[0] || starTaskWorkflowRows[0];
+  const counts = {
+    "全部": starTaskWorkflowRows.length,
+    "待审核": starTaskWorkflowRows.filter((row) => row.auditStatus === "待审核").length,
+    "已退回": starTaskWorkflowRows.filter((row) => row.auditStatus === "已退回").length,
+    "已通过": starTaskWorkflowRows.filter((row) => row.auditStatus === "已通过").length,
+  };
+  const checks = [
+    ["信息完整性", activeTask.progress > 35 ? "符合" : "待补充"],
+    ["时间合理性", activeTask.auditStatus === "已退回" ? "待确认" : "符合"],
+    ["责任清晰度", "符合"],
+    ["风险说明", activeTask.risks ? "待检查" : "符合"],
+    ["附件齐全", activeTask.auditStatus === "已退回" ? "待检查" : "符合"],
+  ];
+  return `
+    <div class="star-audit-layout">
+      <section class="star-audit-list panel">
+        <div class="panel-head">
+          <h2>待审核任务</h2>
+          <span class="muted">按提交时间排序</span>
+        </div>
+        <div class="star-audit-tabs">
+          ${Object.entries(counts).map(([label, count]) => `<button class="${status === label ? "active" : ""}" data-star-audit-status="${label}" type="button">${label} ${count}</button>`).join("")}
+        </div>
+        <div class="star-audit-items">
+          ${auditRows.map((row, index) => `
+            <button class="${row.id === activeTask.id ? "active" : ""}" data-star-audit-task="${row.id}" data-star-audit-current-status="${status}" type="button">
+              <strong>${row.name}</strong>
+              <span>${row.applicant} · ${row.region}</span>
+              <em class="${row.auditStatus === "已退回" ? "danger" : row.auditStatus === "已通过" ? "ok" : ""}">${row.auditStatus}</em>
+            </button>
+          `).join("") || `<div class="empty-state">暂无对应状态任务</div>`}
+        </div>
+      </section>
+      <section class="star-audit-detail panel">
+        <div class="panel-head">
+          <div>
+            <h2>${activeTask.name}</h2>
+            <span class="muted">提交时间：${activeTask.submitTime}</span>
+          </div>
+          <span class="badge ${activeTask.auditStatus === "已通过" ? "good" : activeTask.auditStatus === "已退回" ? "danger" : "warn"}">${activeTask.auditStatus}</span>
+        </div>
+        <div class="star-audit-info-grid">
+          <div><span>申请人</span><b>${activeTask.applicant}</b></div>
+          <div><span>所属区域</span><b>${activeTask.region}</b></div>
+          <div><span>所属项目</span><b>${activeTask.project}</b></div>
+          <div><span>当前阶段</span><b>${activeTask.phase}</b></div>
+          <div><span>完成进度</span><b>${activeTask.progress}%</b></div>
+          <div><span>责任人</span><b>${activeTask.owner}</b></div>
+          <div><span>执行人</span><b>${activeTask.executor}</b></div>
+          <div><span>计划完成</span><b>${activeTask.due}</b></div>
+        </div>
+        <article class="star-audit-summary">
+          <h3>提报内容摘要</h3>
+          <p>${activeTask.summary}</p>
+        </article>
+        <div class="star-audit-checks">
+          ${checks.map(([item, result]) => `<div><span>${item}</span><b class="${result === "符合" ? "ok" : "warning"}">${result}</b></div>`).join("")}
+        </div>
+        <label class="task-field">
+          <span>审核意见</span>
+          <textarea placeholder="填写审核意见，退回时需说明需要补充的内容。"></textarea>
+        </label>
+        <div class="star-task-footer">
+          <button class="danger-btn" type="button">退回修改</button>
+          <button class="ghost-btn" type="button">转交复核</button>
+          <button class="primary-btn" type="button">审核通过</button>
+        </div>
+      </section>
+      ${starTaskGuidanceMarkup("audit")}
+    </div>
+  `;
+}
+
+function starTaskInteractionPageMarkup(type) {
+  const activeType = starTaskInteractionTabs.some((tab) => tab.id === type) ? type : "fill";
+  const activeTab = starTaskInteractionTabs.find((tab) => tab.id === activeType);
+  const contentMap = {
+    fill: starTaskFillMarkup,
+    progress: starTaskProgressMarkup,
+    audit: starTaskAuditMarkup,
+  };
+  return `
+    <section class="panel star-task-interaction-page active-workspace">
+      <div class="metric-drill-head">
+        <button class="ghost-btn" data-star-view="gantt" type="button">← 返回年度任务</button>
+        <div>
+          <h2>${activeTab.title}</h2>
+          <p class="muted">${activeTab.desc}</p>
+        </div>
+        <span class="badge info">任务交互</span>
+      </div>
+      ${starTaskInteractionNav(activeType)}
+      <div id="starInteractionWorkspace">${contentMap[activeType]()}</div>
+    </section>
+  `;
+}
+
 function getRegionMetricValue(row, metric) {
   if (metric.mode === "target") return row[metric.key];
   if (metric.mode === "gap") return row[metric.key].may - row[metric.targetKey];
@@ -1551,8 +2412,10 @@ function getRegionDerivedValue(row, metricId, monthKey = "may") {
   const dataScore = Math.round(clampNumber(82 + Math.min(10, Math.max(0, source.quant - source.accept)) * 0.7 + Math.max(0, row.quant.mom) * 0.35, 70, 99));
   const taskTotal = Math.max(6, Math.round(row.targetNoPay * 2.2 + source.quant * 1.15));
   const taskDone = Math.round(taskTotal * clampNumber(source.accept / Math.max(source.quant, 1), 0.2, 0.95));
-  const taskOverdue = Math.max(0, Math.round((taskTotal - taskDone) * clampNumber(0.12 + (row.targetPay - source.payback) / Math.max(row.targetPay, 1) * 0.3, 0.08, 0.42)));
-  const valueMap = { totalScore, operationScore, deviceScore, dataScore, taskTotal, taskDone, taskOverdue };
+  const taskOverdueOpen = Math.max(0, Math.round((taskTotal - taskDone) * clampNumber(0.12 + (row.targetPay - source.payback) / Math.max(row.targetPay, 1) * 0.3, 0.08, 0.42)));
+  const taskOverdueDone = Math.max(0, Math.round(taskDone * clampNumber(0.04 + Math.max(0, row.accept.mom) * 0.008 + Math.max(0, row.payback.ytd) * 0.006, 0.03, 0.16)));
+  const taskDoing = Math.max(0, taskTotal - taskDone - taskOverdueOpen);
+  const valueMap = { totalScore, operationScore, deviceScore, dataScore, taskTotal, taskDoing, taskDone, taskOverdueDone, taskOverdueOpen, taskOverdue: taskOverdueOpen };
   return valueMap[metricId] ?? 0;
 }
 
@@ -1568,6 +2431,12 @@ function getRegionMetricCardValue(row, metric) {
 function regionMetricTone(row, metric) {
   if (metric.mode !== "gap") return "";
   return getRegionMetricValue(row, metric) >= 0 ? "positive" : "negative";
+}
+
+function regionMetricPercent(row, metric) {
+  if (metric.id === "taskTotal" || metric.mode !== "task") return "";
+  const total = Math.max(getRegionDerivedValue(row, "taskTotal", "may"), 1);
+  return `占比 ${formatRatio(getRegionDerivedValue(row, metric.id, "may") / total * 100)}`;
 }
 
 function regionMetricSeries(row, metric) {
@@ -1657,13 +2526,22 @@ function regionMetricSeries(row, metric) {
 
 function renderRegionMetricCards(regionName = "枣庄区域公司", activeId = "quant") {
   const row = getRegionRow(regionName);
-  return regionMetricConfig.map((metric) => `
+  const cardMarkup = (metric) => `
     <article class="metric-card metric-link region-metric-card ${metric.id === activeId ? "active" : ""} ${regionMetricTone(row, metric)}" data-region-metric="${metric.id}" role="button" tabindex="0">
       <span>${metric.title}</span>
       <strong>${getRegionMetricCardValue(row, metric)}</strong>
-      <small>${metric.note}</small>
+      <small>${regionMetricPercent(row, metric) || metric.note}</small>
+      ${metric.mode === "task" && metric.id !== "taskTotal" ? `<div class="small-progress"><i style="width:${Math.min(100, getRegionDerivedValue(row, metric.id, "may") / Math.max(getRegionDerivedValue(row, "taskTotal", "may"), 1) * 100)}%"></i></div>` : ""}
     </article>
-  `).join("");
+  `;
+  const starMetrics = regionMetricConfig.filter((metric) => ["quant", "accept", "payback", "acceptTarget", "paybackTarget", "acceptGap", "paybackGap"].includes(metric.id));
+  const qualityMetrics = regionMetricConfig.filter((metric) => ["totalScore", "operationScore", "deviceScore", "dataScore"].includes(metric.id));
+  const taskMetrics = regionMetricConfig.filter((metric) => metric.mode === "task");
+  return `
+    <div class="region-metric-row star-counts">${starMetrics.map(cardMarkup).join("")}</div>
+    <div class="region-metric-row quality-counts">${qualityMetrics.map(cardMarkup).join("")}</div>
+    <div class="region-metric-row task-counts">${taskMetrics.map(cardMarkup).join("")}</div>
+  `;
 }
 
 function regionMetricAnalysisMarkup(regionName = "枣庄区域公司", metricId = "quant") {
@@ -1748,7 +2626,7 @@ function regionViewMarkup() {
       <div class="panel-head">
         <div>
           <h2>区域整体情况</h2>
-          <span class="muted">先选择区域，7个指标卡和3个任务卡将自动切换为该区域底稿数据。</span>
+          <span class="muted">先选择区域，第一行展示星级与差距，第二行展示质量得分，第三行展示任务状态结构。</span>
         </div>
         <label class="region-select">选择区域
           <select id="regionSelect">
@@ -2071,6 +2949,19 @@ function renderSupervisionMeasureModal(projectName, regionName) {
   `);
 }
 
+const intensiveSpecialtyOwners = {
+  "自控": "马佳鹏",
+  "人才技能": "龙伦明",
+  "人效": "应璐璐",
+  "工单薪酬": "应璐璐",
+  "运行质量": "来庆龙",
+  "夜间听班": "应璐璐",
+  "设备质量": "马圣昌",
+  "ROM厂网一体化": "杜惠洋",
+};
+
+const intensiveSpecialties = Object.keys(intensiveSpecialtyOwners);
+
 function renderNewSupervisionTaskModal(projectName, regionName) {
   $("#newSupervisionTaskModal")?.remove();
   document.body.insertAdjacentHTML("beforeend", `
@@ -2174,6 +3065,18 @@ function renderNewSupervisionTaskModal(projectName, regionName) {
                 </select>
               </label>
             </div>
+            <div class="specialty-routing-fields">
+              <label class="task-field">
+                <span>专项类别 <em>*</em></span>
+                <select id="intensiveSpecialtySelect">
+                  ${intensiveSpecialties.map((item) => `<option>${item}</option>`).join("")}
+                </select>
+              </label>
+              <label class="task-field">
+                <span>大区对接人</span>
+                <input id="intensiveSpecialtyOwner" type="text" value="${intensiveSpecialtyOwners["自控"]}" readonly />
+              </label>
+            </div>
           </section>
           <section class="task-form-section compact">
             <div class="section-title">
@@ -2196,7 +3099,7 @@ function renderNewSupervisionTaskModal(projectName, regionName) {
   `);
 }
 
-function renderSupervisionRows(rows) {
+function renderSupervisionRows(rows, interactive = true) {
   return `
     <div class="supervision-table need-table">
       <div class="supervision-table-head">
@@ -2204,7 +3107,10 @@ function renderSupervisionRows(rows) {
       </div>
       ${rows.map((row) => `
         <div class="supervision-row">
-          <div class="supervision-project-cell"><button class="supervision-project-link" data-supervision-project="${row.project}" data-supervision-region="${row.region}" type="button">${row.project}</button><small>${row.region}</small></div>
+          <div class="supervision-project-cell">
+            ${interactive ? `<button class="supervision-project-link" data-supervision-project="${row.project}" data-supervision-region="${row.region}" type="button">${row.project}</button>` : `<strong>${row.project}</strong>`}
+            <small>${row.region}</small>
+          </div>
           <div class="supervision-tags">${row.tags.map((tag) => `<i>${tag}</i>`).join("")}</div>
           <span class="supervision-value"><b>${row.currentAccept}★</b><small>目标 ${row.targetStar}★</small></span>
           <span class="supervision-value ${row.currentRun < row.prevRun ? "negative" : "positive"}"><b>${row.currentRun}分</b><small>${formatSigned(projectDelta(row.currentRun, row.prevRun))}</small></span>
@@ -2264,7 +3170,7 @@ function renderSupervisionRegionModal() {
   `);
 }
 
-function supervisionProgressMarkup(selectedRegion = "") {
+function supervisionProgressMarkup(selectedRegion = "", interactive = true) {
   const allRows = supervisionNeedRows();
   const needRows = selectedRegion ? allRows.filter((row) => row.region === selectedRegion) : allRows;
   const submittedCount = supervisionSubmittedCount(needRows);
@@ -2290,7 +3196,7 @@ function supervisionProgressMarkup(selectedRegion = "") {
               <button class="primary-btn" data-open-supervision-region type="button">筛选区域</button>
             </div>
           </div>
-          <div id="supervisionList">${renderSupervisionRows(needRows)}</div>
+          <div id="supervisionList">${renderSupervisionRows(needRows, interactive)}</div>
         </article>
       </section>
     </section>
@@ -2303,12 +3209,10 @@ function renderStarInsight(view) {
   $(".star-metrics")?.classList.toggle("hide-on-region-view", view === "region");
   $(".star-metrics")?.classList.toggle("hide-on-gantt-view", view === "gantt");
   $(".star-metrics")?.classList.toggle("hide-on-project-view", view === "project");
-  $(".star-metrics")?.classList.toggle("hide-on-supervision-view", view === "supervision");
   $$(".star-view-btn").forEach((button) => button.classList.toggle("active", button.dataset.starView === view));
   if (view === "area") content.innerHTML = starAreaViewMarkup();
   if (view === "region") content.innerHTML = regionViewMarkup();
   if (view === "project") content.innerHTML = projectOverviewMarkup();
-  if (view === "supervision") content.innerHTML = supervisionProgressMarkup();
   if (view === "gantt") content.innerHTML = starGanttPanelMarkup();
 }
 
@@ -2951,6 +3855,37 @@ function intensiveRegionTotal(rows, region) {
   return numericScores(rows, region).reduce((sum, value) => sum + value, 0);
 }
 
+function intensiveRegionsForType(type = "acceptance") {
+  if (type === "review") return window.INTENSIVE_REVIEW_SOURCE?.regions || [];
+  return intensiveAcceptanceRegions;
+}
+
+function intensiveRulesForType(type = "acceptance") {
+  if (type === "review") return window.INTENSIVE_REVIEW_SOURCE?.rules || intensiveRuleGroups;
+  return intensiveRuleGroups;
+}
+
+function intensiveMonthRows(type = "acceptance", month = "5月") {
+  if (type === "review") {
+    const sourceRows = window.INTENSIVE_REVIEW_SOURCE?.rows || {};
+    return sourceRows[month] || sourceRows["5月"] || [];
+  }
+  return intensiveAcceptanceMonthRows(month);
+}
+
+function intensiveRegionTotalForType(type, rows, region, month = "5月") {
+  if (type === "review") {
+    const total = window.INTENSIVE_REVIEW_SOURCE?.totals?.[month]?.[region];
+    if (typeof total === "number") return total;
+  }
+  return intensiveRegionTotal(rows, region);
+}
+
+function intensiveRegionColumnLabel(type, regionName) {
+  if (type !== "review") return regionName;
+  return regionName.replace("区域公司", "").replace("业务区", "").replace("区域", "");
+}
+
 const intensiveRuleGroups = [
   {
     key: "A",
@@ -3017,37 +3952,38 @@ function intensivePreviousMonth(month = "5月") {
   return { "5月": "4月", "4月": "3月", "3月": "2月" }[month] || "4月";
 }
 
-function intensiveScoreDelta(row, region, month) {
+function intensiveScoreDelta(row, region, month, type = "acceptance") {
   const current = scoreForRegion(row, region);
   if (typeof current !== "number") return null;
-  const previousRows = intensiveAcceptanceMonthRows(intensivePreviousMonth(month));
+  const previousRows = intensiveMonthRows(type, intensivePreviousMonth(month));
   const previousRow = previousRows.find((item) => item.metric === row.metric && item.level2 === row.level2);
   const previous = previousRow ? scoreForRegion(previousRow, region) : null;
   if (typeof previous !== "number") return null;
   return Number((current - previous).toFixed(2));
 }
 
-function intensiveTotalDelta(region, month) {
-  const currentRows = intensiveAcceptanceMonthRows(month);
-  const previousRows = intensiveAcceptanceMonthRows(intensivePreviousMonth(month));
-  const current = intensiveRegionTotal(currentRows, region);
-  const previous = intensiveRegionTotal(previousRows, region);
+function intensiveTotalDelta(region, month, type = "acceptance") {
+  const currentRows = intensiveMonthRows(type, month);
+  const previousMonth = intensivePreviousMonth(month);
+  const previousRows = intensiveMonthRows(type, previousMonth);
+  const current = intensiveRegionTotalForType(type, currentRows, region, month);
+  const previous = intensiveRegionTotalForType(type, previousRows, region, previousMonth);
   return Number((current - previous).toFixed(1));
 }
 
-function intensiveDisplayMetric(row, region, mode, month) {
+function intensiveDisplayMetric(row, region, mode, month, type = "acceptance") {
   if (mode === "value") return intensiveDisplayValue(valueForRegion(row, region), "value");
   if (mode === "delta") {
-    const delta = intensiveScoreDelta(row, region, month);
+    const delta = intensiveScoreDelta(row, region, month, type);
     if (delta === null) return "-";
     return `${delta > 0 ? "+" : ""}${Number.isInteger(delta) ? delta : delta.toFixed(1)}`;
   }
   return intensiveDisplayValue(scoreForRegion(row, region), "score");
 }
 
-function intensiveMetricClass(row, region, mode, month) {
+function intensiveMetricClass(row, region, mode, month, type = "acceptance") {
   if (mode === "delta") {
-    const delta = intensiveScoreDelta(row, region, month);
+    const delta = intensiveScoreDelta(row, region, month, type);
     if (delta === null || delta === 0) return "delta-flat";
     return delta > 0 ? "delta-up" : "delta-down";
   }
@@ -3092,6 +4028,7 @@ function intensiveSubjectHeaderMarkup(type, active = "dashboard") {
 }
 
 function intensiveMonthFilterMarkup(month, type, mode, region = "大区") {
+  const regions = intensiveRegionsForType(type);
   return `
     <section class="automation-filter-row intensive-filter-row">
       <label>月份
@@ -3101,7 +4038,7 @@ function intensiveMonthFilterMarkup(month, type, mode, region = "大区") {
       </label>
       <label>区域筛选
         <select id="intensiveRegionSelect">
-          ${["大区", ...intensiveAcceptanceRegions].map((item) => `<option value="${item}" ${item === region ? "selected" : ""}>${item}</option>`).join("")}
+          ${["大区", ...regions].map((item) => `<option value="${item}" ${item === region ? "selected" : ""}>${item}</option>`).join("")}
         </select>
       </label>
       <div class="automation-mode-switch intensive-inline-switch">
@@ -3114,6 +4051,7 @@ function intensiveMonthFilterMarkup(month, type, mode, region = "大区") {
 }
 
 function intensiveRulesMarkup(type) {
+  const ruleGroups = intensiveRulesForType(type);
   return `
     <section class="panel intensive-rules-panel intensive-rules-overview">
       <div class="rules-hero">
@@ -3124,7 +4062,7 @@ function intensiveRulesMarkup(type) {
         <strong>红线要求：如发生生产安全事故，当次考核不通过</strong>
       </div>
       <div class="rules-overview-table">
-        ${intensiveRuleGroups.map((group) => `
+        ${ruleGroups.map((group) => `
           <article class="rule-group ${group.theme}">
             <div class="rule-group-title">
               <em>${group.key}</em>
@@ -3161,26 +4099,41 @@ function acceptanceScoreClass(score) {
   return "score-pass";
 }
 
-function intensiveAreaDetailMarkup(rows, regions, mode, month) {
+function intensiveReviewMetricName(row) {
+  return String(row.metric || "").replace(/\s*\/\s*[\d.]+%?$/g, "");
+}
+
+function intensiveReviewWeightLabel(weight) {
+  if (typeof weight === "number") return `${Math.round(weight * 100)}%`;
+  const text = String(weight || "");
+  const numeric = Number(text);
+  if (!Number.isNaN(numeric) && numeric > 0 && numeric <= 1) return `${Math.round(numeric * 100)}%`;
+  return text || "-";
+}
+
+function intensiveReviewAreaDetailMarkup(rows, regions, mode, month) {
   return `
-    <section class="panel acceptance-detail-panel">
+    <section class="panel acceptance-detail-panel review-detail-panel">
       <div class="panel-head">
-        <div><h2>大区集约化验收明细</h2><span class="muted">按一级、二级指标合并展示，区域列展示${mode === "score" ? "得分" : mode === "delta" ? `较${intensivePreviousMonth(month)}得分变化` : "具体数值"}</span></div>
+        <div><h2>大区集约化回顾明细</h2><span class="muted">按你提供的表格样式展示：第一行指标与区域，第二行对应得分</span></div>
       </div>
-      <div class="acceptance-group-table area">
+      <div class="review-sheet-list">
         ${intensiveGroupedSections(rows).map((level1) => `
-          <article class="acceptance-indicator-group">
+          <article class="review-sheet-group">
             <header><strong>${level1.level1}</strong><span>${level1.level2Groups.reduce((sum, group) => sum + group.rows.length, 0)} 项指标</span></header>
             ${level1.level2Groups.map((level2) => `
-              <section class="acceptance-subgroup">
-                <div class="acceptance-subtitle">${level2.level2}</div>
-                <div class="acceptance-metric-head">
-                  <span>三级评价指标</span><span>权重</span>${regions.map((regionName) => `<span>${regionName}</span>`).join("")}
-                </div>
+              <section class="review-sheet-section">
+                <div class="review-sheet-section-title">${level2.level2}</div>
                 ${level2.rows.map((row) => `
-                  <div class="acceptance-metric-row">
-                    <span>${row.metric}</span><span>${row.weight}</span>
-                    ${regions.map((regionName) => `<span class="${intensiveMetricClass(row, regionName, mode, month)}">${intensiveDisplayMetric(row, regionName, mode, month)}</span>`).join("")}
+                  <div class="review-sheet-table">
+                    <div class="review-sheet-head">
+                      <span>三级指标</span><span>权重</span>${regions.map((regionName) => `<span title="${regionName}">${intensiveRegionColumnLabel("review", regionName)}</span>`).join("")}
+                    </div>
+                    <div class="review-sheet-row">
+                      <span title="${intensiveReviewMetricName(row)}">${intensiveReviewMetricName(row)}</span>
+                      <span>${intensiveReviewWeightLabel(row.weight)}</span>
+                      ${regions.map((regionName) => `<span class="${intensiveMetricClass(row, regionName, mode, month, "review")}">${intensiveDisplayMetric(row, regionName, mode, month, "review")}</span>`).join("")}
+                    </div>
                   </div>
                 `).join("")}
               </section>
@@ -3192,7 +4145,40 @@ function intensiveAreaDetailMarkup(rows, regions, mode, month) {
   `;
 }
 
-function intensiveSingleRegionDetailMarkup(rows, region, mode, month, selectedTotal) {
+function intensiveAreaDetailMarkup(rows, regions, mode, month, type = "acceptance") {
+  if (type === "review") return intensiveReviewAreaDetailMarkup(rows, regions, mode, month);
+  const title = type === "review" ? "大区集约化回顾明细" : "大区集约化验收明细";
+  return `
+    <section class="panel acceptance-detail-panel ${type === "review" ? "review-detail-panel" : ""}">
+      <div class="panel-head">
+        <div><h2>${title}</h2><span class="muted">按一级、二级指标合并展示，区域列展示${mode === "score" ? "得分" : mode === "delta" ? `较${intensivePreviousMonth(month)}得分变化` : "具体数值"}</span></div>
+      </div>
+      <div class="acceptance-group-table area ${type === "review" ? "review-area-table" : ""}">
+        ${intensiveGroupedSections(rows).map((level1) => `
+          <article class="acceptance-indicator-group">
+            <header><strong>${level1.level1}</strong><span>${level1.level2Groups.reduce((sum, group) => sum + group.rows.length, 0)} 项指标</span></header>
+            ${level1.level2Groups.map((level2) => `
+              <section class="acceptance-subgroup">
+                <div class="acceptance-subtitle">${level2.level2}</div>
+                <div class="acceptance-metric-head">
+                  <span>三级评价指标</span><span>权重</span>${regions.map((regionName) => `<span title="${regionName}">${intensiveRegionColumnLabel(type, regionName)}</span>`).join("")}
+                </div>
+                ${level2.rows.map((row) => `
+                  <div class="acceptance-metric-row">
+                    <span>${row.metric}</span><span>${row.weight}</span>
+                    ${regions.map((regionName) => `<span class="${intensiveMetricClass(row, regionName, mode, month, type)}">${intensiveDisplayMetric(row, regionName, mode, month, type)}</span>`).join("")}
+                  </div>
+                `).join("")}
+              </section>
+            `).join("")}
+          </article>
+        `).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function intensiveSingleRegionDetailMarkup(rows, region, mode, month, selectedTotal, type = "acceptance") {
   return `
     <section class="panel single-acceptance-panel">
       <div class="panel-head">
@@ -3213,7 +4199,7 @@ function intensiveSingleRegionDetailMarkup(rows, region, mode, month, selectedTo
                   <div class="acceptance-metric-row">
                     <span>${row.metric}</span>
                     <span>${intensiveDisplayValue(valueForRegion(row, region), "value")}</span>
-                    <span class="${intensiveMetricClass(row, region, mode === "value" ? "score" : mode, month)}">${intensiveDisplayMetric(row, region, mode === "value" ? "score" : mode, month)}</span>
+                    <span class="${intensiveMetricClass(row, region, mode === "value" ? "score" : mode, month, type)}">${intensiveDisplayMetric(row, region, mode === "value" ? "score" : mode, month, type)}</span>
                   </div>
                 `).join("")}
               </section>
@@ -3375,27 +4361,277 @@ function renderIntensiveProjectTaskModal(projectName, regionName) {
   `);
 }
 
+const intensiveTaskMonths = Array.from({ length: 12 }, (_, index) => `${index + 1}月`);
+const intensiveTaskToday = new Date("2026-07-05T00:00:00");
+
+function intensiveTasksForType(type = "acceptance") {
+  return window.INTENSIVE_TASK_SOURCE?.[type] || [];
+}
+
+function intensiveTaskSpecialty(task = {}) {
+  const text = `${task.specialty || ""} ${task.task || ""} ${task.metric || ""} ${task.measure || ""} ${task.target || ""}`;
+  if (/自控|程控|数采|自动化/.test(text)) return "自控";
+  if (/人才|技能|双证|取证|培训|岗位/.test(text)) return "人才技能";
+  if (/人效|人均|人员|人数|人事|运营规模|创利/.test(text)) return "人效";
+  if (/工单|薪酬|工时/.test(text)) return "工单薪酬";
+  if (/夜间|听班/.test(text)) return "夜间听班";
+  if (/设备|维保|故障|SED/.test(text)) return "设备质量";
+  if (/ROM|厂网|TOM|一体化|云链/.test(text)) return "ROM厂网一体化";
+  return "运行质量";
+}
+
+function filterIntensiveTasksBySpecialty(tasks, specialty = "全部") {
+  if (!specialty || specialty === "全部") return tasks;
+  return tasks.filter((task) => intensiveTaskSpecialty(task) === specialty);
+}
+
+function parseTaskDate(value) {
+  if (!value) return null;
+  const date = new Date(`${value}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function taskMonthNumber(value, fallback = 7) {
+  const date = parseTaskDate(value);
+  return date ? date.getMonth() + 1 : fallback;
+}
+
+function intensiveTaskStatusKey(task) {
+  const status = task.status || "";
+  const progress = Number(task.progress || 0);
+  const endDate = parseTaskDate(task.end);
+  if (status.includes("逾期")) return "overdue";
+  if (progress >= 100 || status.includes("完成")) return "done";
+  if (endDate && endDate < intensiveTaskToday && progress < 100) return "overdue";
+  return "doing";
+}
+
+function intensiveTaskStatusLabel(statusKey) {
+  return { done: "已完成", doing: "进行中", overdue: "逾期" }[statusKey] || "进行中";
+}
+
+function intensiveTaskOwner(task) {
+  return (task.owner || "待明确").split("；")[0];
+}
+
+function intensiveTaskHoverTip(task, statusKey) {
+  return `任务：${task.task}\n当前状态：${intensiveTaskStatusLabel(statusKey)}\n完成进度：${task.progress}%\n负责人：${intensiveTaskOwner(task)}\n计划周期：${task.start} 至 ${task.end}`;
+}
+
+function intensiveTaskRegions(type, specialty = "全部") {
+  return [...new Set(filterIntensiveTasksBySpecialty(intensiveTasksForType(type), specialty).map((task) => task.region))];
+}
+
+function intensiveTasksByRegion(type, regionName, specialty = "全部") {
+  return filterIntensiveTasksBySpecialty(intensiveTasksForType(type), specialty).filter((task) => task.region === regionName);
+}
+
+function summarizeMonthlyTasks(tasks, monthIndex) {
+  const activeTasks = tasks.filter((task) => {
+    const start = taskMonthNumber(task.start, 1);
+    const end = taskMonthNumber(task.end, start);
+    return monthIndex >= start && monthIndex <= end;
+  });
+  const counts = activeTasks.reduce((acc, task) => {
+    acc[intensiveTaskStatusKey(task)] += 1;
+    return acc;
+  }, { done: 0, doing: 0, overdue: 0 });
+  const status = counts.overdue ? "overdue" : counts.doing ? "doing" : counts.done ? "done" : "empty";
+  return {
+    total: activeTasks.length,
+    counts,
+    status,
+    names: activeTasks.slice(0, 4).map((task) => `· ${task.task}`).join("\n"),
+  };
+}
+
+function intensiveTaskTooltip(monthLabel, summary) {
+  if (!summary.total) return `${monthLabel}\n暂无任务`;
+  return `${monthLabel}\n任务总数 ${summary.total} 项\n已完成 ${summary.counts.done} 项\n进行中 ${summary.counts.doing} 项\n逾期 ${summary.counts.overdue} 项\n${summary.names}`;
+}
+
+function intensiveTaskStats(tasks) {
+  const counts = tasks.reduce((acc, task) => {
+    acc[intensiveTaskStatusKey(task)] += 1;
+    return acc;
+  }, { done: 0, doing: 0, overdue: 0 });
+  return {
+    total: tasks.length,
+    done: counts.done,
+    doing: counts.doing,
+    overdue: counts.overdue,
+  };
+}
+
+function intensiveTaskOverviewMarkup(type = "acceptance", specialty = "全部") {
+  const rows = intensiveTaskRegions(type, specialty).map((region) => ({ region, tasks: intensiveTasksByRegion(type, region, specialty) }));
+  const allTasks = rows.flatMap((row) => row.tasks);
+  const stats = intensiveTaskStats(allTasks);
+  return `
+    <section class="acceptance-kpis intensive-task-kpis">
+      <article><span>任务总数</span><strong>${stats.total}</strong><small>${type === "review" ? "回顾评价任务" : "25年集约化建设任务"}</small></article>
+      <article><span>进行中</span><strong>${stats.doing}</strong><small>按计划周期跟踪</small></article>
+      <article><span>已完成</span><strong>${stats.done}</strong><small>完成度100%或状态完成</small></article>
+      <article><span>逾期任务</span><strong>${stats.overdue}</strong><small>逾期或超计划未完成</small></article>
+    </section>
+    <section class="panel intensive-task-board">
+      <div class="panel-head">
+        <div>
+          <h2>${type === "review" ? "集约化回顾" : "集约化验收"} · 年度任务总览</h2>
+          <span class="muted">点击区域名称进入该区域任务清单；鼠标移到月份色块查看当月任务情况。</span>
+        </div>
+        <div class="task-legend"><span><i class="done"></i>已完成</span><span><i class="doing"></i>进行中</span><span><i class="overdue"></i>逾期</span></div>
+      </div>
+      <div class="intensive-task-filter-row">
+        <label>
+          <span>专项筛选</span>
+          <select id="intensiveTaskSpecialtySelect" data-intensive-task-type="${safeText(type)}">
+            <option value="全部"${specialty === "全部" ? " selected" : ""}>全部专项</option>
+            ${intensiveSpecialties.map((item) => `<option value="${item}"${item === specialty ? " selected" : ""}>${item}</option>`).join("")}
+          </select>
+        </label>
+        <strong>${specialty === "全部" ? "当前展示全部任务" : `当前展示：${safeText(specialty)}`}</strong>
+      </div>
+      <div class="intensive-task-overview-table">
+        <div class="intensive-task-overview-head">
+          <span>区域</span>${intensiveTaskMonths.map((month) => `<span>${month}</span>`).join("")}
+        </div>
+        ${rows.map(({ region, tasks }) => {
+          const regionStats = intensiveTaskStats(tasks);
+          return `
+            <div class="intensive-task-overview-row">
+              <button class="intensive-region-name" data-intensive-task-region="${safeText(region)}" data-intensive-task-type="${safeText(type)}" data-intensive-task-specialty="${safeText(specialty)}" type="button">
+                <strong>${safeText(region)}</strong>
+                <small>${regionStats.total}项 · 进行中${regionStats.doing} · 逾期${regionStats.overdue}</small>
+              </button>
+              ${intensiveTaskMonths.map((month, index) => {
+                const summary = summarizeMonthlyTasks(tasks, index + 1);
+                const tip = safeText(intensiveTaskTooltip(month, summary));
+                return `<span class="task-month-cell ${summary.status}" data-floating-tip="${tip}">${summary.total ? summary.total : ""}</span>`;
+              }).join("")}
+            </div>
+          `;
+        }).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function intensiveRegionTaskGanttMarkup(type, regionName, specialty = "全部") {
+  const tasks = intensiveTasksByRegion(type, regionName, specialty);
+  const stats = intensiveTaskStats(tasks);
+  return `
+    <section class="panel intensive-task-board region-mode">
+      <div class="panel-head">
+        <div>
+          <h2>${safeText(regionName)} · 年度任务清单</h2>
+          <span class="muted">${type === "review" ? "回顾评价任务清单" : "25年集约化建设任务清单"} · ${specialty === "全部" ? "全部专项" : safeText(specialty)} · 点击任务名称查看完整信息。</span>
+        </div>
+        <div class="task-board-actions">
+          <button class="density-btn active" data-task-density="compact" type="button">紧凑</button>
+          <button class="density-btn" data-task-density="relaxed" type="button">舒展</button>
+          <button class="ghost-btn" data-intensive-task-back="${safeText(type)}" data-intensive-task-back-specialty="${safeText(specialty)}" type="button">返回总览</button>
+        </div>
+      </div>
+      <section class="acceptance-kpis intensive-task-kpis compact">
+        <article><span>区域任务</span><strong>${stats.total}</strong><small>当前区域</small></article>
+        <article><span>进行中</span><strong>${stats.doing}</strong><small>蓝色任务条</small></article>
+        <article><span>已完成</span><strong>${stats.done}</strong><small>绿色任务条</small></article>
+        <article><span>逾期</span><strong>${stats.overdue}</strong><small>红色任务条</small></article>
+      </section>
+      <div class="intensive-region-gantt">
+        <div class="intensive-region-gantt-head">
+          <span>任务事项</span>${intensiveTaskMonths.map((month) => `<span>${month}</span>`).join("")}
+        </div>
+        ${tasks.map((task, index) => {
+          const start = taskMonthNumber(task.start, 7);
+          const end = taskMonthNumber(task.end, start);
+          const status = intensiveTaskStatusKey(task);
+          const barLeft = ((start - 1) / 12) * 100;
+          const barWidth = ((Math.min(12, end) - start + 1) / 12) * 100;
+          const taskTip = safeText(intensiveTaskHoverTip(task, status));
+          return `
+            <div class="intensive-region-gantt-row">
+              <button class="intensive-task-name" data-intensive-task-detail="${safeText(task.id)}" data-intensive-task-type="${safeText(type)}" data-floating-tip="${taskTip}" type="button">
+                <strong>${safeText(task.task)}</strong>
+              </button>
+              <div class="intensive-task-month-grid">
+                ${intensiveTaskMonths.map(() => "<span></span>").join("")}
+                <button class="intensive-task-bar ${status}" data-intensive-task-detail="${safeText(task.id)}" data-intensive-task-type="${safeText(type)}" data-floating-tip="${taskTip}" style="--bar-left:${barLeft}%; --bar-width:${barWidth}%;" type="button">
+                  ${task.progress}%
+                </button>
+              </div>
+            </div>
+          `;
+        }).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderIntensiveTaskDetailModal(type, taskId) {
+  const task = intensiveTasksForType(type).find((item) => item.id === taskId);
+  if (!task) return;
+  const status = intensiveTaskStatusKey(task);
+  $("#intensiveTaskDetailModal")?.remove();
+  document.body.insertAdjacentHTML("beforeend", `
+    <div class="modal-backdrop" id="intensiveTaskDetailModal">
+      <section class="task-detail-modal intensive-task-detail-modal">
+        <header>
+          <div>
+            <h2>${safeText(task.id)} · ${safeText(task.task)}</h2>
+            <p class="muted">${safeText(task.region)} · ${safeText(task.project)} · ${safeText(task.metric)}</p>
+          </div>
+          <button class="icon-close" data-close-intensive-task-detail type="button">×</button>
+        </header>
+        <div class="task-detail-grid">
+          <div><span>计划状态</span><b>${intensiveTaskStatusLabel(status)}</b></div>
+          <div><span>完成进度</span><b>${task.progress}%</b></div>
+          <div><span>计划开始</span><b>${safeText(task.start)}</b></div>
+          <div><span>计划完成</span><b>${safeText(task.end)}</b></div>
+          <div><span>当前阶段</span><b>${safeText(task.stage || "计划准备")}</b></div>
+          <div><span>责任人</span><b>${safeText(task.owner.split("；")[0])}</b></div>
+        </div>
+        <div class="task-detail-sections">
+          <section><h3>年度目标</h3><p>${safeText(task.target || "暂无")}</p></section>
+          <section><h3>主要措施</h3><p>${safeText(task.measure || "暂无")}</p></section>
+          <section><h3>关键节点</h3><p>${safeText(task.milestone || "暂无")}</p></section>
+          <section><h3>验收标准</h3><p>${safeText(task.acceptance || "暂无")}</p></section>
+          <section><h3>风险 / 备注</h3><p>${safeText(task.risk || "暂无")}</p></section>
+          <section><h3>复盘改进</h3><p>${safeText(task.review || "待后续复盘填写")}</p></section>
+        </div>
+        <footer>
+          <button class="ghost-btn" data-close-intensive-task-detail type="button">关闭</button>
+          <button class="primary-btn" data-close-intensive-task-detail type="button">确认</button>
+        </footer>
+      </section>
+    </div>
+  `);
+}
+
 function intensiveAcceptanceDashboardMarkup(type = "acceptance", month = "5月", mode = "score", region = "大区") {
-  const rows = intensiveAcceptanceMonthRows(month);
-  const totals = intensiveAcceptanceRegions.map((region) => ({ region, total: intensiveRegionTotal(rows, region) })).sort((a, b) => b.total - a.total);
+  const rows = intensiveMonthRows(type, month);
+  const regions = intensiveRegionsForType(type);
+  const safeRegion = region === "大区" || regions.includes(region) ? region : "大区";
+  const totals = regions.map((regionName) => ({ region: regionName, total: intensiveRegionTotalForType(type, rows, regionName, month) })).sort((a, b) => b.total - a.total);
   const best = totals[0];
   const weak = totals[totals.length - 1];
-  const selectedRegions = region === "大区" ? intensiveAcceptanceRegions : [region];
-  const selectedTotal = region === "大区" ? null : intensiveRegionTotal(rows, region);
-  const selectedLowCount = region === "大区" ? 0 : rows.filter((row) => {
-    const score = scoreForRegion(row, region);
+  const selectedRegions = safeRegion === "大区" ? regions : [safeRegion];
+  const selectedTotal = safeRegion === "大区" ? null : intensiveRegionTotalForType(type, rows, safeRegion, month);
+  const selectedLowCount = safeRegion === "大区" ? 0 : rows.filter((row) => {
+    const score = scoreForRegion(row, safeRegion);
     return typeof score === "number" && score < 4;
   }).length;
   return `
-    ${intensiveMonthFilterMarkup(month, type, mode, region)}
+    ${intensiveMonthFilterMarkup(month, type, mode, safeRegion)}
     <section class="acceptance-kpis">
-      <article><span>${region === "大区" ? "参评区域" : "当前区域"}</span><strong>${region === "大区" ? intensiveAcceptanceRegions.length : region}</strong><small>${month}区域层级</small></article>
+      <article><span>${safeRegion === "大区" ? "参评区域" : "当前区域"}</span><strong>${safeRegion === "大区" ? regions.length : safeRegion}</strong><small>${month}区域层级</small></article>
       <article><span>评价指标</span><strong>${rows.length}</strong><small>覆盖 4 类评价</small></article>
-      <article><span>${region === "大区" ? "最高区域" : "区域总分"}</span><strong>${region === "大区" ? best.region : selectedTotal.toFixed(1)}</strong><small>${region === "大区" ? `${best.total.toFixed(1)} 分` : "当前筛选区域"}</small></article>
-      <article><span>${region === "大区" ? "重点关注" : "低分指标"}</span><strong>${region === "大区" ? weak.region : selectedLowCount}</strong><small>${region === "大区" ? `${weak.total.toFixed(1)} 分` : "低于4分或为0分"}</small></article>
+      <article><span>${safeRegion === "大区" ? "最高区域" : "区域总分"}</span><strong>${safeRegion === "大区" ? best.region : selectedTotal.toFixed(1)}</strong><small>${safeRegion === "大区" ? `${best.total.toFixed(1)} 分` : "当前筛选区域"}</small></article>
+      <article><span>${safeRegion === "大区" ? "重点关注" : "低分指标"}</span><strong>${safeRegion === "大区" ? weak.region : selectedLowCount}</strong><small>${safeRegion === "大区" ? `${weak.total.toFixed(1)} 分` : "低于4分或为0分"}</small></article>
     </section>
-    ${region === "大区" ? `
-      <section class="acceptance-region-summary">
+    ${safeRegion === "大区" ? `
+      <section class="acceptance-region-summary ${type === "review" ? "review-region-summary" : ""}">
         ${totals.map((item, index) => `
           <article>
             <div class="rank-badge">${index + 1}</div>
@@ -3405,13 +4641,13 @@ function intensiveAcceptanceDashboardMarkup(type = "acceptance", month = "5月",
             </div>
             <div class="region-summary-score">
               <b>${item.total.toFixed(1)}</b>
-              <i class="${intensiveTotalDelta(item.region, month) >= 0 ? "delta-up" : "delta-down"}">${intensiveTotalDelta(item.region, month) >= 0 ? "+" : ""}${intensiveTotalDelta(item.region, month).toFixed(1)}</i>
+              <i class="${intensiveTotalDelta(item.region, month, type) >= 0 ? "delta-up" : "delta-down"}">${intensiveTotalDelta(item.region, month, type) >= 0 ? "+" : ""}${intensiveTotalDelta(item.region, month, type).toFixed(1)}</i>
             </div>
           </article>
         `).join("")}
       </section>
-      ${intensiveAreaDetailMarkup(rows, selectedRegions, mode, month)}
-    ` : intensiveSingleRegionDetailMarkup(rows, region, mode, month, selectedTotal)}
+      ${intensiveAreaDetailMarkup(rows, selectedRegions, mode, month, type)}
+    ` : intensiveSingleRegionDetailMarkup(rows, safeRegion, mode, month, selectedTotal, type)}
   `;
 }
 
@@ -3420,7 +4656,7 @@ function intensiveSubjectMarkup(type = "acceptance", subView = "dashboard", mont
   if (subView === "rules") body = intensiveRulesMarkup(type);
   if (subView === "dashboard") body = intensiveAcceptanceDashboardMarkup(type, month, mode, region);
   if (subView === "region") body = intensiveProjectRegionBoardMarkup(type, month, mode, region);
-  if (subView === "tasks") body = automationEmptySubpageMarkup("任务总览");
+  if (subView === "tasks") body = intensiveTaskOverviewMarkup(type);
   return `<div class="automation-dashboard intensive-subject">${intensiveSubjectHeaderMarkup(type, subView)}${body}</div>`;
 }
 
@@ -3473,7 +4709,6 @@ function renderStarModule(item) {
           <button class="star-view-btn active" data-star-view="area" type="button">大区整体情况</button>
           <button class="star-view-btn" data-star-view="region" type="button">区域整体情况</button>
           <button class="star-view-btn" data-star-view="project" type="button">项目整体情况</button>
-          <button class="star-view-btn" data-star-view="supervision" type="button">督办进度</button>
           <button class="star-view-btn" data-star-view="gantt" type="button">年度任务</button>
         </div>
       </div>
@@ -3482,9 +4717,7 @@ function renderStarModule(item) {
           ${renderStarMetricCards()}
         </div>
         <div class="star-task-row">
-          <article class="metric-card task-total"><span>当前任务总数</span><strong>186</strong><small>5月整改任务总量</small></article>
-          <article class="metric-card task-done"><span>已完成数</span><strong>124</strong><small>完成比例 66.7%</small><div class="small-progress"><i style="width:66.7%"></i></div></article>
-          <article class="metric-card task-overdue"><span>逾期任务数</span><strong>20</strong><small>需重点督办</small></article>
+          ${renderStarTaskStatusCards()}
         </div>
       </section>
       <div id="starInsightContent">${starAreaViewMarkup()}</div>
@@ -3924,17 +5157,55 @@ function openModule(moduleId) {
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
+function hideFloatingTaskTooltip() {
+  $("#floatingTaskTooltip")?.remove();
+}
+
+function showFloatingTaskTooltip(text, event) {
+  if (!text) {
+    hideFloatingTaskTooltip();
+    return;
+  }
+  let tooltip = $("#floatingTaskTooltip");
+  if (!tooltip) {
+    document.body.insertAdjacentHTML("beforeend", `<div id="floatingTaskTooltip" class="floating-task-tooltip"></div>`);
+    tooltip = $("#floatingTaskTooltip");
+  }
+  tooltip.textContent = text;
+  const width = Math.min(360, Math.max(260, window.innerWidth * 0.24));
+  tooltip.style.width = `${width}px`;
+  const height = Math.min(260, tooltip.offsetHeight || 160);
+  const left = Math.min(window.innerWidth - width - 18, Math.max(18, event.clientX + 18));
+  const top = Math.min(window.innerHeight - height - 18, Math.max(18, event.clientY + 18));
+  tooltip.style.left = `${left}px`;
+  tooltip.style.top = `${top}px`;
+  tooltip.classList.add("active");
+}
+
 function bindEvents() {
   document.body.addEventListener("click", (event) => {
     const assistantEntry = event.target.closest("#assistantEntry");
     const closeAgent = event.target.closest("[data-close-agent]");
     const agentQuestion = event.target.closest("[data-agent-question]");
     const starView = event.target.closest("[data-star-view]");
+    const starTaskMetric = event.target.closest("[data-star-task-metric]");
+    const starTaskBoardEntry = event.target.closest("[data-star-task-board-entry]");
+    const starTaskBoardView = event.target.closest("[data-star-task-board-view]");
+    const starReport = event.target.closest("[data-star-report]");
+    const starTaskInteraction = event.target.closest("[data-star-task-interaction]");
+    const starProgressTask = event.target.closest("[data-star-progress-task]");
+    const starAuditStatus = event.target.closest("[data-star-audit-status]");
+    const starAuditTask = event.target.closest("[data-star-audit-task]");
     const intensiveView = event.target.closest("[data-intensive-view]");
     const intensiveSubview = event.target.closest("[data-intensive-subview]");
     const intensiveMode = event.target.closest("[data-intensive-mode]");
     const intensiveProjectTask = event.target.closest("[data-intensive-project-task][data-intensive-project-region]");
     const closeIntensiveProjectTask = event.target.closest("[data-close-intensive-project-task]");
+    const intensiveTaskRegion = event.target.closest("[data-intensive-task-region][data-intensive-task-type]");
+    const intensiveTaskBack = event.target.closest("[data-intensive-task-back]");
+    const intensiveTaskDetail = event.target.closest("[data-intensive-task-detail][data-intensive-task-type]");
+    const closeIntensiveTaskDetail = event.target.closest("[data-close-intensive-task-detail]");
+    const taskDensity = event.target.closest("[data-task-density]");
     const automationDetailMode = event.target.closest("[data-automation-detail-mode]");
     const automationSubview = event.target.closest("[data-automation-subview]");
     const starAreaMetric = event.target.closest("[data-star-area-metric]");
@@ -4034,8 +5305,51 @@ function bindEvents() {
       return;
     }
     if (supervisionRegionFilter) {
-      $("#starInsightContent").innerHTML = supervisionProgressMarkup(supervisionRegionFilter.dataset.supervisionRegionFilter);
+      $("#starInsightContent").innerHTML = starAreaReportMarkup("project", supervisionRegionFilter.dataset.supervisionRegionFilter);
       $("#supervisionRegionModal")?.remove();
+      return;
+    }
+    if (starTaskMetric) {
+      $("#starInsightContent").innerHTML = starTaskMetricAnalysisMarkup(starTaskMetric.dataset.starTaskMetric);
+      $$(".star-view-btn").forEach((button) => button.classList.toggle("active", button.dataset.starView === "area"));
+      $("#starInsightContent").scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    if (starTaskBoardEntry) {
+      $("#starInsightContent").innerHTML = starTaskBoardMarkup("region", "count", "doneRate");
+      $$(".star-view-btn").forEach((button) => button.classList.toggle("active", button.dataset.starView === "gantt"));
+      $("#starInsightContent").scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    if (starTaskBoardView) {
+      const mode = $("#starTaskBoardMode")?.value || "count";
+      const rank = $("#starTaskBoardRank")?.value || "doneRate";
+      const regionName = $("#starTaskBoardRegionSelect")?.value || "枣庄区域公司";
+      $("#starInsightContent").innerHTML = starTaskBoardMarkup(starTaskBoardView.dataset.starTaskBoardView, mode, rank, regionName);
+      return;
+    }
+    if (starReport) {
+      $("#starInsightContent").innerHTML = starAreaReportMarkup(starReport.dataset.starReport);
+      $$(".star-view-btn").forEach((button) => button.classList.toggle("active", button.dataset.starView === "area"));
+      return;
+    }
+    if (starTaskInteraction) {
+      $("#starInsightContent").innerHTML = starTaskInteractionPageMarkup(starTaskInteraction.dataset.starTaskInteraction);
+      $$(".star-view-btn").forEach((button) => button.classList.toggle("active", button.dataset.starView === "gantt"));
+      $("#starInsightContent").scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    if (starProgressTask) {
+      updateStarProgressWorkspace(starProgressTask.dataset.starProgressTask);
+      return;
+    }
+    if (starAuditStatus) {
+      $("#starInteractionWorkspace").innerHTML = starTaskAuditMarkup(starAuditStatus.dataset.starAuditStatus);
+      return;
+    }
+    if (starAuditTask) {
+      const status = starAuditTask.dataset.starAuditCurrentStatus || "全部";
+      $("#starInteractionWorkspace").innerHTML = starTaskAuditMarkup(status, starAuditTask.dataset.starAuditTask);
       return;
     }
     if (starAreaMetric) {
@@ -4083,6 +5397,36 @@ function bindEvents() {
     }
     if (closeIntensiveProjectTask || event.target.id === "intensiveProjectTaskModal") {
       $("#intensiveProjectTaskModal")?.remove();
+      return;
+    }
+    if (intensiveTaskRegion) {
+      const specialty = intensiveTaskRegion.dataset.intensiveTaskSpecialty || "全部";
+      $("#intensiveInsightContent").innerHTML = `<div class="automation-dashboard intensive-subject">${intensiveSubjectHeaderMarkup(intensiveTaskRegion.dataset.intensiveTaskType, "tasks")}${intensiveRegionTaskGanttMarkup(intensiveTaskRegion.dataset.intensiveTaskType, intensiveTaskRegion.dataset.intensiveTaskRegion, specialty)}</div>`;
+      $("#intensiveInsightContent").scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    if (intensiveTaskBack) {
+      const type = intensiveTaskBack.dataset.intensiveTaskBack;
+      const specialty = intensiveTaskBack.dataset.intensiveTaskBackSpecialty || "全部";
+      $("#intensiveInsightContent").innerHTML = `<div class="automation-dashboard intensive-subject">${intensiveSubjectHeaderMarkup(type, "tasks")}${intensiveTaskOverviewMarkup(type, specialty)}</div>`;
+      return;
+    }
+    if (intensiveTaskDetail) {
+      hideFloatingTaskTooltip();
+      renderIntensiveTaskDetailModal(intensiveTaskDetail.dataset.intensiveTaskType, intensiveTaskDetail.dataset.intensiveTaskDetail);
+      return;
+    }
+    if (closeIntensiveTaskDetail || event.target.id === "intensiveTaskDetailModal") {
+      $("#intensiveTaskDetailModal")?.remove();
+      return;
+    }
+    if (taskDensity) {
+      const board = taskDensity.closest(".intensive-task-board");
+      board?.classList.toggle("relaxed-density", taskDensity.dataset.taskDensity === "relaxed");
+      board?.classList.toggle("compact-density", taskDensity.dataset.taskDensity === "compact");
+      board?.querySelectorAll("[data-task-density]").forEach((button) => {
+        button.classList.toggle("active", button === taskDensity);
+      });
       return;
     }
     if (intensiveSubview) {
@@ -4151,11 +5495,31 @@ function bindEvents() {
     }
   });
 
+  document.body.addEventListener("mousemove", (event) => {
+    const tooltipTarget = event.target.closest("[data-floating-tip]");
+    if (!tooltipTarget) {
+      hideFloatingTaskTooltip();
+      return;
+    }
+    showFloatingTaskTooltip(tooltipTarget.dataset.floatingTip, event);
+  });
+
+  document.body.addEventListener("mouseleave", hideFloatingTaskTooltip);
+  window.addEventListener("scroll", hideFloatingTaskTooltip, true);
+
   document.body.addEventListener("change", (event) => {
     if (event.target.id === "regionSelect") {
       const regionName = event.target.value;
       $("#regionMetricCards").innerHTML = renderRegionMetricCards(regionName, "quant");
       $("#regionRankingContent").innerHTML = regionMetricAnalysisMarkup(regionName, "quant");
+      return;
+    }
+    if (["starTaskBoardMode", "starTaskBoardRank", "starTaskBoardRegionSelect"].includes(event.target.id)) {
+      const view = $(".star-task-board-page .star-report-btn.active")?.dataset.starTaskBoardView || "region";
+      const mode = $("#starTaskBoardMode")?.value || "count";
+      const rank = $("#starTaskBoardRank")?.value || "doneRate";
+      const regionName = $("#starTaskBoardRegionSelect")?.value || "枣庄区域公司";
+      $("#starInsightContent").innerHTML = starTaskBoardMarkup(view, mode, rank, regionName);
       return;
     }
     if (event.target.id === "projectRegionSelect") {
@@ -4170,6 +5534,32 @@ function bindEvents() {
     if (event.target.id === "resourceAssistSelect") {
       const resourceFields = $("[data-resource-fields]");
       resourceFields?.classList.toggle("active", event.target.value === "是");
+      return;
+    }
+    if (event.target.id === "starResourceNeed") {
+      const resourceFields = $("[data-star-resource-fields]");
+      resourceFields?.classList.toggle("active", event.target.value === "是");
+      return;
+    }
+    if (event.target.id === "starFillRegionSelect") {
+      const projectSelect = $("#starFillProjectSelect");
+      if (projectSelect) {
+        projectSelect.innerHTML = starTaskProjects(event.target.value).map((project) => `<option>${project}</option>`).join("");
+      }
+      return;
+    }
+    if (event.target.matches("[data-star-task-filter='progress']")) {
+      updateStarProgressWorkspace();
+      return;
+    }
+    if (event.target.id === "intensiveSpecialtySelect") {
+      const ownerInput = $("#intensiveSpecialtyOwner");
+      if (ownerInput) ownerInput.value = intensiveSpecialtyOwners[event.target.value] || "";
+      return;
+    }
+    if (event.target.id === "intensiveTaskSpecialtySelect") {
+      const type = event.target.dataset.intensiveTaskType || "acceptance";
+      $("#intensiveInsightContent").innerHTML = `<div class="automation-dashboard intensive-subject">${intensiveSubjectHeaderMarkup(type, "tasks")}${intensiveTaskOverviewMarkup(type, event.target.value)}</div>`;
       return;
     }
     if (event.target.id === "automationMonthSelect" || event.target.id === "automationBatchSelect" || event.target.id === "automationRegionSelect") {
@@ -4189,6 +5579,16 @@ function bindEvents() {
       const region = $("#intensiveRegionSelect")?.value || "大区";
       $("#intensiveInsightContent").innerHTML = intensiveSubjectMarkup(type, subView, month, mode, region);
     }
+  });
+
+  document.body.addEventListener("input", (event) => {
+    if (event.target.matches("[data-star-task-filter='progress']")) {
+      updateStarProgressWorkspace();
+      return;
+    }
+    if (!event.target.matches("[data-star-progress-range]")) return;
+    const valueInput = event.target.closest(".progress-slider-box")?.querySelector("[data-star-progress-value]");
+    if (valueInput) valueInput.value = `${event.target.value}%`;
   });
 
   document.body.addEventListener("submit", (event) => {
