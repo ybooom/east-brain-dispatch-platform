@@ -883,24 +883,12 @@ function renderNavigation() {
 
 function renderCards() {
   $("#moduleCards").innerHTML = modules.map((item) => `
-    <article class="module-card cockpit-module-card">
+    <article class="module-card cockpit-module-card cockpit-topic-card" data-module="${item.id}">
       <div class="module-card-head">
         <span class="module-icon">${item.icon}</span>
         <strong>${item.name}</strong>
-        <em><i></i>运行中</em>
       </div>
-      <div class="module-primary">
-        <div>
-          <span>任务进度</span>
-          <strong>${item.kpis[0]?.[0].includes("%") ? item.kpis[0][0] : item.kpis[1]?.[0].includes("%") ? item.kpis[1][0] : "73%"}</strong>
-        </div>
-        <div class="module-progress">
-          <span style="width:${item.kpis[0]?.[0].includes("%") ? item.kpis[0][0] : item.kpis[1]?.[0].includes("%") ? item.kpis[1][0] : "73%"}"></span>
-        </div>
-      </div>
-      <div class="module-mini-kpis">
-        ${item.kpis.slice(0, 3).map(([value, label]) => `<div><span>${label}</span><b>${value}</b></div>`).join("")}
-      </div>
+      <i class="topic-card-accent"></i>
       <button class="module-enter" data-module="${item.id}">进入专题 <span>→</span></button>
     </article>
   `).join("");
@@ -1471,10 +1459,10 @@ function renderTaskBoardTable(rows, view, mode) {
         <div class="task-board-row ${taskBoardTone(row)}">
           <b>${index + 1}</b>
           <strong>${row.itemName}</strong>
-          <span>${taskBoardCell(row, "total", mode)}</span>
-          <span>${taskBoardCell(row, "done", mode)}</span>
-          <span>${taskBoardCell(row, "overdueDone", mode)}</span>
-          <span>${taskBoardCell(row, "overdueOpen", mode)}</span>
+          <span class="task-board-cell total">${taskBoardCell(row, "total", mode)}</span>
+          <span class="task-board-cell done">${taskBoardCell(row, "done", mode)}</span>
+          <span class="task-board-cell overdue-done">${taskBoardCell(row, "overdueDone", mode)}</span>
+          <span class="task-board-cell overdue-open">${taskBoardCell(row, "overdueOpen", mode)}</span>
         </div>
       `).join("")}
     </div>
@@ -1602,11 +1590,19 @@ function starTaskMetricAnalysisMarkup(metricId) {
   const previousRatio = metric.ratios[metric.ratios.length - 2];
   const delta = current - previous;
   const ratioDelta = Number((currentRatio - previousRatio).toFixed(1));
+  const chartWidth = 500;
+  const chartHeight = 260;
+  const chartPadding = { left: 52, right: 26, top: 26, bottom: 44 };
+  const plotWidth = chartWidth - chartPadding.left - chartPadding.right;
+  const plotHeight = chartHeight - chartPadding.top - chartPadding.bottom;
   const linePoints = metric.ratios.map((value, index) => ({
-    left: metric.ratios.length === 1 ? 0 : (index / (metric.ratios.length - 1)) * 100,
-    bottom: (value / maxRatio) * 82 + 8,
+    x: chartPadding.left + (metric.ratios.length === 1 ? 0 : (index / (metric.ratios.length - 1)) * plotWidth),
+    y: chartPadding.top + plotHeight - (value / maxRatio) * plotHeight,
     value,
+    month: starTaskMonths[index],
   }));
+  const axisValues = Array.from({ length: 5 }, (_, index) => Math.round((maxRatio / 4) * index));
+  const polylinePoints = linePoints.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
   return `
     <section class="panel star-task-metric-panel">
       <div class="metric-drill-head">
@@ -1646,22 +1642,23 @@ function starTaskMetricAnalysisMarkup(metricId) {
         <article class="task-trend-card">
           <div class="panel-head"><h3>${metric.ratioLabel}</h3><span class="muted">结构占比</span></div>
           <div class="task-ratio-chart">
-            <div class="task-ratio-line">
-              ${linePoints.map((point, index) => `
-                <i style="left:${point.left}%; bottom:${point.bottom}%">
-                  <b>${formatRatio(point.value)}</b>
-                  <em>${starTaskMonths[index]}</em>
-                </i>
-              `).join("")}
-              ${linePoints.slice(1).map((point, index) => {
-                const prev = linePoints[index];
-                const width = point.left - prev.left;
-                const height = point.bottom - prev.bottom;
-                const angle = Math.atan2(height, width) * 180 / Math.PI;
-                const length = Math.sqrt(width * width + height * height);
-                return `<span style="left:${prev.left}%; bottom:${prev.bottom}%; width:${length}%; transform:rotate(${angle}deg)"></span>`;
+            <svg class="task-ratio-svg" viewBox="0 0 ${chartWidth} ${chartHeight}" role="img" aria-label="${metric.ratioLabel}月度折线图">
+              ${axisValues.map((value) => {
+                const y = chartPadding.top + plotHeight - (value / maxRatio) * plotHeight;
+                return `
+                  <line class="grid-line" x1="${chartPadding.left}" y1="${y}" x2="${chartWidth - chartPadding.right}" y2="${y}"></line>
+                  <text class="axis-label" x="${chartPadding.left - 12}" y="${y + 4}" text-anchor="end">${value}</text>
+                `;
               }).join("")}
-            </div>
+              <line class="axis-line" x1="${chartPadding.left}" y1="${chartPadding.top}" x2="${chartPadding.left}" y2="${chartPadding.top + plotHeight}"></line>
+              <line class="axis-line" x1="${chartPadding.left}" y1="${chartPadding.top + plotHeight}" x2="${chartWidth - chartPadding.right}" y2="${chartPadding.top + plotHeight}"></line>
+              <polyline class="ratio-polyline ${metric.tone}" points="${polylinePoints}"></polyline>
+              ${linePoints.map((point) => `
+                <circle class="ratio-node ${metric.tone}" cx="${point.x}" cy="${point.y}" r="5.8"></circle>
+                <text class="ratio-value" x="${point.x}" y="${point.y - 14}" text-anchor="middle">${formatRatio(point.value)}</text>
+                <text class="ratio-month" x="${point.x}" y="${chartPadding.top + plotHeight + 28}" text-anchor="middle">${point.month}</text>
+              `).join("")}
+            </svg>
           </div>
         </article>
       </div>
@@ -2088,7 +2085,7 @@ function starTaskFillMarkup() {
             <b>基本信息</b>
             <span>任务进入年度池前的基础口径</span>
           </div>
-          <div class="task-form-grid four-cols">
+          <div class="task-form-grid task-basic-grid">
             <label class="task-field">
               <span>任务名称 <em>*</em></span>
               <input value="5月星级短板整改" maxlength="50" />
@@ -2116,6 +2113,10 @@ function starTaskFillMarkup() {
             <label class="task-field">
               <span>任务优先级 <em>*</em></span>
               <select><option>重点</option><option>紧急</option><option>普通</option></select>
+            </label>
+            <label class="task-field">
+              <span>计划开始时间 <em>*</em></span>
+              <input type="date" value="2026-06-08" />
             </label>
             <label class="task-field">
               <span>计划完成时间 <em>*</em></span>
@@ -2200,12 +2201,13 @@ function starTaskFillMarkup() {
             <div><b>数据底稿</b><span>Excel / CSV</span></div>
           </div>
           <div class="star-subtask-table">
-            <div><span>子任务</span><span>负责人</span><span>计划节点</span><span>状态</span><span>操作</span></div>
+            <div><span>子任务</span><span>负责人</span><span>开始时间</span><span>完成时间</span><span>状态</span><span>操作</span></div>
             ${["问题拆解", "资料补齐", "现场复核", "销项归档"].map((name, index) => `
               <div>
                 <input value="${name}" />
                 <input value="${index % 2 ? "项目执行人" : "区域负责人"}" />
-                <input value="6月${8 + index * 5}日" />
+                <input value="6月${8 + index * 4}日" />
+                <input value="6月${12 + index * 4}日" />
                 <select><option ${index === 0 ? "selected" : ""}>已完成</option><option ${index !== 0 ? "selected" : ""}>待推进</option><option>进行中</option><option>逾期</option></select>
                 <button class="text-btn" type="button">删除</button>
               </div>
@@ -2239,10 +2241,7 @@ function starTaskGuidanceMarkup(type) {
       <article>
         <h3>流程节点</h3>
         <div class="star-step-list horizontal">
-          <span><b>1</b>项目提报</span>
-          <span><b>2</b>区域审核</span>
-          <span><b>3</b>大区确认</span>
-          <span><b>4</b>进入年度任务</span>
+          ${["任务提报", "区域初审", "大区复核", "纳入任务池", "任务进度更新", "大区验收确认", "办结归档"].map((step, index) => `<span><b>${index + 1}</b>${step}</span>`).join("")}
         </div>
       </article>
     </section>
@@ -2368,8 +2367,21 @@ function getRegionMetricValue(row, metric) {
   return row[metric.key];
 }
 
+function formatOneDecimal(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return value ?? "-";
+  const rounded = Number(number.toFixed(1));
+  return Number.isInteger(rounded) ? `${rounded}` : rounded.toFixed(1);
+}
+
 function formatSigned(value) {
-  return value > 0 ? `+${value}` : `${value}`;
+  const number = Number(value);
+  if (!Number.isFinite(number)) return value ?? "-";
+  const rounded = Number(number.toFixed(1));
+  if (rounded === 0) return "0";
+  const absolute = Math.abs(rounded);
+  const formatted = Number.isInteger(absolute) ? `${absolute}` : absolute.toFixed(1);
+  return `${rounded > 0 ? "+" : "-"}${formatted}`;
 }
 
 function clampNumber(value, min, max) {
@@ -2416,6 +2428,9 @@ function getRegionDerivedValue(row, metricId, monthKey = "may") {
   const taskOverdueDone = Math.max(0, Math.round(taskDone * clampNumber(0.04 + Math.max(0, row.accept.mom) * 0.008 + Math.max(0, row.payback.ytd) * 0.006, 0.03, 0.16)));
   const taskDoing = Math.max(0, taskTotal - taskDone - taskOverdueOpen);
   const valueMap = { totalScore, operationScore, deviceScore, dataScore, taskTotal, taskDoing, taskDone, taskOverdueDone, taskOverdueOpen, taskOverdue: taskOverdueOpen };
+  if (monthKey === "may" && row.derivedOverride && Object.prototype.hasOwnProperty.call(row.derivedOverride, metricId)) {
+    return row.derivedOverride[metricId];
+  }
   return valueMap[metricId] ?? 0;
 }
 
@@ -2425,7 +2440,7 @@ function getRegionRow(regionName = "枣庄区域公司") {
 
 function getRegionMetricCardValue(row, metric) {
   const value = getRegionMetricValue(row, metric);
-  return metric.mode === "gap" || metric.mode === "change" ? formatSigned(value) : value;
+  return metric.mode === "gap" || metric.mode === "change" ? formatSigned(value) : formatOneDecimal(value);
 }
 
 function regionMetricTone(row, metric) {
@@ -2484,6 +2499,7 @@ function regionMetricSeries(row, metric) {
           quant: { ...row.quant, may: item.quant },
           accept: { ...row.accept, may: item.accept },
           payback: { ...row.payback, may: item.payback },
+          derivedOverride: null,
         };
         return [item.month, getRegionDerivedValue(fakeRow, metric.id, "may")];
       }
@@ -2526,8 +2542,12 @@ function regionMetricSeries(row, metric) {
 
 function renderRegionMetricCards(regionName = "枣庄区域公司", activeId = "quant") {
   const row = getRegionRow(regionName);
+  return renderMetricCardWall(row, activeId, "region-metric");
+}
+
+function renderMetricCardWall(row, activeId = "quant", dataAttr = "region-metric") {
   const cardMarkup = (metric) => `
-    <article class="metric-card metric-link region-metric-card ${metric.id === activeId ? "active" : ""} ${regionMetricTone(row, metric)}" data-region-metric="${metric.id}" role="button" tabindex="0">
+    <article class="metric-card metric-link region-metric-card ${metric.id === activeId ? "active" : ""} ${regionMetricTone(row, metric)}" data-${dataAttr}="${metric.id}" role="button" tabindex="0">
       <span>${metric.title}</span>
       <strong>${getRegionMetricCardValue(row, metric)}</strong>
       <small>${regionMetricPercent(row, metric) || metric.note}</small>
@@ -2545,30 +2565,36 @@ function renderRegionMetricCards(regionName = "枣庄区域公司", activeId = "
 }
 
 function regionMetricAnalysisMarkup(regionName = "枣庄区域公司", metricId = "quant") {
-  const row = getRegionRow(regionName);
+  return metricAnalysisMarkup(getRegionRow(regionName), metricId, "区域维度");
+}
+
+function metricAnalysisMarkup(row, metricId = "quant", scopeLabel = "区域维度") {
   const metric = regionMetricConfig.find((item) => item.id === metricId) || regionMetricConfig[0];
   const metricData = regionMetricSeries(row, metric);
   const values = metricData.series.map((item) => Math.abs(item[1]));
   const maxValue = Math.max(...values, 1);
   const rankingRows = [...regionRankingRows].sort((a, b) => getRegionMetricValue(b, metric) - getRegionMetricValue(a, metric));
-  const rankIndex = rankingRows.findIndex((item) => item.region === row.region) + 1;
+  const rankIndex = row.project ? Math.max(1, row.rank || 1) : rankingRows.findIndex((item) => item.region === row.region) + 1;
   const source = row[metric.key] && typeof row[metric.key] === "object" ? row[metric.key] : null;
   const firstValue = metricData.series[0][1];
   const ytdText = source ? formatSigned(source.ytd) : formatSigned(metricData.current - firstValue);
-  const diagnosis = `AI根据当前区域底稿、月度趋势和排名情况判断：${row.region}${metric.title}5月值为 ${getRegionMetricCardValue(row, metric)}，在20个区域中排名第 ${rankIndex}，${metricData.subtitle}。建议结合目标差距、环比变化和较去年12月变化，判断该区域本月表现是否需要专项跟踪。`;
+  const subjectName = row.project || row.region;
+  const rankingText = row.project ? `项目序列第 ${rankIndex}` : `20个区域中排名第 ${rankIndex}`;
+  const currentText = getRegionMetricCardValue(row, metric);
+  const diagnosis = `AI根据当前${scopeLabel.replace("维度", "")}底稿、月度趋势和排名情况判断：${subjectName}${metric.title}5月值为 ${currentText}，在${rankingText}，${metricData.subtitle}。建议结合目标差距、环比变化和较去年12月变化，判断本月表现是否需要专项跟踪。`;
   return `
     <section class="panel metric-drill-panel region-drill-panel">
       <div class="metric-drill-head">
         <div>
-          <h2>${row.region} · ${metric.title}分析</h2>
-          <p class="muted">${row.bp} · 原表排名 ${row.rank} · 当前展示 2025年12月、1-5月变化趋势。</p>
+          <h2>${subjectName} · ${metric.title}分析</h2>
+          <p class="muted">${row.bp} · ${scopeLabel} · 当前展示 2025年12月、1-5月变化趋势。</p>
         </div>
-        <span class="badge info">区域维度</span>
+        <span class="badge info">${scopeLabel}</span>
       </div>
       <div class="metric-drill-layout">
         <article class="metric-hero-card">
           <span>5月当前值</span>
-          <strong>${getRegionMetricCardValue(row, metric)}<em>${metric.unit || ""}</em></strong>
+          <strong>${currentText}<em>${metric.unit || ""}</em></strong>
           <p>${metric.note}</p>
           <div class="metric-delta-row">
             <b>区域排名 第${rankIndex}</b>
@@ -2594,7 +2620,7 @@ function regionMetricAnalysisMarkup(regionName = "枣庄区域公司", metricId 
           <div class="metric-bar-chart">
             ${metricData.series.map(([month, value]) => `
               <div class="metric-bar-item">
-                <b>${value}</b>
+                <b>${formatOneDecimal(value)}</b>
                 <i class="${value < 0 ? "negative" : ""}" style="height:${Math.max(14, (Math.abs(value) / maxValue) * 100)}%"></i>
                 <span>${month}</span>
               </div>
@@ -2604,13 +2630,13 @@ function regionMetricAnalysisMarkup(regionName = "枣庄区域公司", metricId 
         <article class="panel metric-table-card">
           <div class="panel-head">
             <h2>数据明细</h2>
-            <span class="muted">${row.region}</span>
+            <span class="muted">${subjectName}</span>
           </div>
           <div class="metric-data-table">
             ${metricData.series.map(([month, value], index) => {
               const prevValue = index === 0 ? null : metricData.series[index - 1][1];
               const change = prevValue === null ? "基准" : formatSigned(Number((value - prevValue).toFixed(1)));
-              return `<div><span>${month}</span><b>${value}</b><em>${change}</em></div>`;
+              return `<div><span>${month}</span><b>${formatOneDecimal(value)}</b><em>${change}</em></div>`;
             }).join("")}
           </div>
         </article>
@@ -2664,6 +2690,31 @@ const projectRegionCatalog = {
   "郑州业务区": ["兰考三污", "兰考二污", "巩义北控", "濮阳城东", "通许污水厂"],
   "北京建工环境": ["太仓开发区", "奉化莼湖", "宜兴和桥", "宜兴城市", "宜兴官林", "宜兴张渚", "宜兴徐舍", "宜兴新建", "徐州丁万河", "徐州不老河", "徐州新城区", "徐州西区", "徐州龙亭", "盐城城南", "盐城开发区", "昆山北区", "昆山吴淞江", "昆山张浦", "昆山花桥", "昆山陆家", "宜兴城市三期"],
 };
+
+const specialtyTaskTypes = ["自控工程", "技改工程", "大修重置", "日常维护维修", "工艺调试", "产品采购", "人才培训", "其他"];
+const specialtyOwners = ["张三", "李四", "王敏", "赵悦", "刘洋", "孙琪", "周强", "陈敏"];
+const specialtyStatuses = ["已完成", "进行中", "逾期", "预警", "未开始"];
+
+const specialtyTasks = [
+  { id: "SP-001", name: "A/P/PLC改造", region: "杭湖区域公司", project: "湖州光正", year: "2025年", type: "自控工程", owner: "张三", status: "逾期", progress: 72, start: 2, end: 5, overdueDays: 12 },
+  { id: "SP-002", name: "1#泵体改造", region: "杭湖区域公司", project: "余杭污水四期", year: "2025年", type: "技改工程", owner: "李四", status: "进行中", progress: 58, start: 1, end: 6 },
+  { id: "SP-003", name: "自控系统升级", region: "杭湖区域公司", project: "南浔新城", year: "2025年", type: "自控工程", owner: "王敏", status: "进行中", progress: 64, start: 2, end: 6 },
+  { id: "SP-004", name: "脱硫方案评审", region: "济宁区域公司", project: "曲阜嘉诚", year: "2025年", type: "工艺调试", owner: "赵悦", status: "逾期", progress: 45, start: 1, end: 5, overdueDays: 5 },
+  { id: "SP-005", name: "脱硫推进", region: "济宁区域公司", project: "济宁鱼台", year: "2025年", type: "工艺调试", owner: "刘洋", status: "预警", progress: 52, start: 3, end: 9, warningDays: 7 },
+  { id: "SP-006", name: "工艺优化专项", region: "苏皖业务区", project: "南京荣泰", year: "2025年", type: "工艺调试", owner: "孙琪", status: "进行中", progress: 68, start: 3, end: 6 },
+  { id: "SP-007", name: "冷却塔节能改造", region: "聊城区域公司", project: "冠县嘉诚", year: "2025年", type: "技改工程", owner: "周强", status: "逾期", progress: 38, start: 4, end: 5, overdueDays: 3 },
+  { id: "SP-008", name: "巡检检修计划", region: "临沂区域公司", project: "临沂北城", year: "2025年", type: "日常维护维修", owner: "陈敏", status: "预警", progress: 49, start: 2, end: 9, warningDays: 5 },
+  { id: "SP-009", name: "人才培训拓展", region: "青岛区域公司", project: "青岛高新区", year: "2025年", type: "人才培训", owner: "张三", status: "未开始", progress: 0, start: 7, end: 11 },
+  { id: "SP-010", name: "紫外消毒设备更换", region: "烟威区域公司", project: "烟台北控", year: "2025年", type: "产品采购", owner: "李四", status: "已完成", progress: 100, start: 4, end: 6 },
+  { id: "SP-011", name: "核心设备大修重置", region: "北京建工环境", project: "昆山花桥", year: "2026年", type: "大修重置", owner: "王敏", status: "进行中", progress: 41, start: 5, end: 10 },
+  { id: "SP-012", name: "曝气系统能效提升", region: "潍坊区域公司", project: "潍坊坊安", year: "2026年", type: "技改工程", owner: "赵悦", status: "进行中", progress: 35, start: 4, end: 8 },
+  { id: "SP-013", name: "药剂投加联调", region: "枣庄区域公司", project: "枣庄北控", year: "2026年", type: "工艺调试", owner: "刘洋", status: "预警", progress: 22, start: 6, end: 8, warningDays: 6 },
+  { id: "SP-014", name: "仪表校验与台账梳理", region: "洛阳区域公司", project: "洛阳新区", year: "2026年", type: "日常维护维修", owner: "孙琪", status: "未开始", progress: 0, start: 8, end: 12 },
+  { id: "SP-015", name: "厂站自控点表复核", region: "东营滨州区域公司", project: "东营北控", year: "2026年", type: "自控工程", owner: "周强", status: "已完成", progress: 100, start: 1, end: 3 },
+  { id: "SP-016", name: "备品备件集中采购", region: "太原区域公司", project: "太原中北", year: "2026年", type: "产品采购", owner: "陈敏", status: "进行中", progress: 57, start: 5, end: 9 },
+  { id: "SP-017", name: "设备巡检标准化", region: "菏泽区域公司", project: "巨野城北", year: "2026年", type: "日常维护维修", owner: "张三", status: "进行中", progress: 46, start: 3, end: 7 },
+  { id: "SP-018", name: "厂网协同专项", region: "郑州业务区", project: "通许污水厂", year: "2026年", type: "其他", owner: "王敏", status: "逾期", progress: 61, start: 2, end: 6, overdueDays: 8 },
+];
 
 const projectActualRows = [
   { region: "杭湖区域公司", project: "湖州光正", statusPay: 0.34, targetStar: 3, targetScore: 80, targetRun: 70, currentTotal: 85.24, prevTotal: 83.89, currentRun: 81.12, prevRun: 78.7, currentDevice: 87.55, prevDevice: 88.68, currentData: 100, prevData: 100, currentQuant: 4, prevQuant: 3, currentAccept: 3, prevAccept: 3, currentPay: 0, prevPay: 0, yearAccept: 3, yearPay: 3 },
@@ -2724,7 +2775,7 @@ function getProjectRecord(regionName = "杭湖区域公司", projectName = "湖�
 }
 
 function projectDelta(current, previous) {
-  return Number((current - previous).toFixed(2));
+  return Number((current - previous).toFixed(1));
 }
 
 function projectMetricCard(label, current, previous, unit, toneMode = "up") {
@@ -2733,12 +2784,71 @@ function projectMetricCard(label, current, previous, unit, toneMode = "up") {
   return `
     <article class="project-kpi-card">
       <span>${label}</span>
-      <strong>${current}${unit}</strong>
-      <small>上月：${previous}${unit}</small>
-      <em class="${positive ? "positive" : "negative"}">${delta >= 0 ? "↑" : "↓"} ${Math.abs(delta)}${unit}</em>
+      <strong>${formatOneDecimal(current)}${unit}</strong>
+      <small>上月：${formatOneDecimal(previous)}${unit}</small>
+      <em class="${positive ? "positive" : "negative"}">${delta >= 0 ? "↑" : "↓"} ${formatOneDecimal(Math.abs(delta))}${unit}</em>
       <div class="sparkline">${[previous * 0.92, previous, (previous + current) / 2, current * 0.97, current].map((value, index) => `<i style="height:${Math.max(12, Math.min(100, value))}%; opacity:${0.45 + index * 0.12}"></i>`).join("")}</div>
     </article>
   `;
+}
+
+function getProjectMetricRow(regionName = "杭湖区域公司", projectName = "湖州光正") {
+  const regionRow = getRegionRow(regionName);
+  const record = getProjectRecord(regionName, projectName);
+  const seed = projectHash(regionName, projectName);
+  const scale = clampNumber(0.18 + (seed % 28) / 100, 0.18, 0.46);
+  const buildSource = (current, previous, decSeed, target = current) => {
+    const apr = Math.max(0, Math.round(previous));
+    const may = Math.max(0, Math.round(current));
+    const dec = Math.max(0, Math.round(decSeed));
+    return {
+      may,
+      apr,
+      dec,
+      mom: may - apr,
+      ytd: may - dec,
+      target,
+    };
+  };
+  const targetNoPay = Math.max(1, Math.round((regionRow.targetNoPay || 8) * scale + (seed % 3)));
+  const targetPay = Math.max(1, Math.round((regionRow.targetPay || 6) * scale + ((seed + 1) % 2)));
+  const taskTotal = Math.max(6, Math.round(8 + record.currentQuant * 3 + record.currentAccept * 2 + (seed % 6)));
+  const taskDone = Math.max(0, Math.min(taskTotal, Math.round(taskTotal * clampNumber(record.currentTotal / 110, 0.35, 0.92))));
+  const taskOverdueOpen = Math.max(0, Math.min(taskTotal - taskDone, (seed + Math.round(record.currentData)) % 4));
+  const taskOverdueDone = Math.max(0, Math.min(taskDone, (seed + Math.round(record.currentRun)) % 3));
+  const taskDoing = Math.max(0, taskTotal - taskDone - taskOverdueOpen);
+  return {
+    ...regionRow,
+    region: projectName,
+    project: projectName,
+    bp: regionName,
+    rank: (seed % 12) + 1,
+    targetNoPay,
+    targetPay,
+    quant: buildSource(record.currentQuant, record.prevQuant, Math.max(0, record.prevQuant - ((seed % 2) + 1))),
+    accept: buildSource(record.currentAccept, record.prevAccept, Math.max(0, record.prevAccept - (seed % 2))),
+    payback: buildSource(record.currentPay, record.prevPay, Math.max(0, record.prevPay - (seed % 2))),
+    derivedOverride: {
+      totalScore: record.currentTotal,
+      operationScore: record.currentRun,
+      deviceScore: record.currentDevice,
+      dataScore: record.currentData,
+      taskTotal,
+      taskDoing,
+      taskDone,
+      taskOverdueDone,
+      taskOverdueOpen,
+      taskOverdue: taskOverdueOpen,
+    },
+  };
+}
+
+function renderProjectMetricCards(regionName = "杭湖区域公司", projectName = "湖州光正", activeId = "quant") {
+  return renderMetricCardWall(getProjectMetricRow(regionName, projectName), activeId, "project-metric");
+}
+
+function projectMetricAnalysisMarkup(regionName = "杭湖区域公司", projectName = "湖州光正", metricId = "quant") {
+  return metricAnalysisMarkup(getProjectMetricRow(regionName, projectName), metricId, "项目维度");
 }
 
 function renderProjectSelectors(regionName = "杭湖区域公司", projectName = "湖州光正") {
@@ -2767,7 +2877,7 @@ function renderProjectDetail(regionName = "杭湖区域公司", projectName = "�
   const status = record.currentTotal >= record.targetScore ? "正常" : record.currentTotal >= record.targetScore - 8 ? "关注" : "预警";
   const starText = "★".repeat(Math.max(0, Math.round(record.targetStar))) + "☆".repeat(Math.max(0, 5 - Math.round(record.targetStar)));
   return `
-    <div id="projectDetailContent">
+    <div id="projectDetailContent" class="project-detail-content">
       <section class="project-info-strip">
         <div><span>所属区域</span><strong>${record.region}</strong></div>
         <div><span>项目名称</span><strong>${record.project}</strong></div>
@@ -2775,25 +2885,19 @@ function renderProjectDetail(regionName = "杭湖区域公司", projectName = "�
         <div><span>当前回款率</span><strong>${Math.round(record.statusPay * 1000) / 10}%</strong></div>
         <div><span>目标星级</span><strong class="project-stars">${starText}</strong></div>
       </section>
-      <section class="project-kpi-grid">
-        ${projectMetricCard("当月量化星级环比", record.currentQuant, record.prevQuant, "★")}
-        ${projectMetricCard("当月验收+量化星级环比", record.currentAccept, record.prevAccept, "★")}
-        ${projectMetricCard("当月验收+量化+回款星级环比", record.currentPay, record.prevPay, "★")}
-        ${projectMetricCard("运行质量得分环比", record.currentRun, record.prevRun, "分")}
-        ${projectMetricCard("设备质量得分环比", record.currentDevice, record.prevDevice, "分")}
-        ${projectMetricCard("数据质量得分环比", record.currentData, record.prevData, "分")}
+      <section class="panel project-metric-panel">
+        <div class="panel-head">
+          <div>
+            <h2>项目指标明细</h2>
+            <span class="muted">与区域整体情况同口径展示，当前数据切换为单项目维度。</span>
+          </div>
+          <span class="badge info">项目维度</span>
+        </div>
+        <div class="region-metric-grid project-metric-grid" id="projectMetricCards">
+          ${renderProjectMetricCards(regionName, projectName, "quant")}
+        </div>
       </section>
-      <section class="project-analysis-grid">
-        <article class="panel project-ai-card">
-          <h2>AI智能分析</h2>
-          <p>${record.project} 本月总分 ${record.currentTotal} 分，较上月 ${formatSigned(projectDelta(record.currentTotal, record.prevTotal))} 分；量化星级 ${record.currentQuant}★，验收+量化 ${record.currentAccept}★，叠加回款后 ${record.currentPay}★。${record.currentData < record.prevData ? "数据质量较上月下降，需要优先复核填报完整性和异常数据。" : "数据质量保持稳定，可继续关注运行质量和设备质量的短板项。"}</p>
-        </article>
-        <article class="panel project-data-card">
-          <div><span>当月总分</span><b>${record.currentTotal}</b><em>上月 ${record.prevTotal}</em></div>
-          <div><span>年度验收+量化</span><b>${record.yearAccept}★</b><em>年底口径</em></div>
-          <div><span>年度验收+量化+回款</span><b>${record.yearPay}★</b><em>年底口径</em></div>
-        </article>
-      </section>
+      <div id="projectMetricContent">${projectMetricAnalysisMarkup(regionName, projectName, "quant")}</div>
     </div>
   `;
 }
@@ -4682,6 +4786,454 @@ function renderIntensiveInsight(viewId = "overview") {
   content.innerHTML = intensivePlaceholderMarkup(viewId);
 }
 
+function specialtyProjectsForRegion(regionName = "全部区域") {
+  if (regionName !== "全部区域") return projectRegionCatalog[regionName] || [];
+  return Object.values(projectRegionCatalog).flat();
+}
+
+function specialtyFilterState() {
+  return {
+    year: $("#specialtyYearSelect")?.value || "所有",
+    region: $("#specialtyRegionSelect")?.value || "全部区域",
+    project: $("#specialtyProjectSelect")?.value || "全部项目",
+    status: $("#specialtyStatusSelect")?.value || "全部状态",
+    owner: $("#specialtyOwnerSelect")?.value || "全部责任人",
+    type: $("#specialtyTypeSelect")?.value || "全部",
+  };
+}
+
+function specialtyFilteredTasks(filters = {}) {
+  return specialtyTasks.filter((task) => {
+    if (filters.year && filters.year !== "所有" && task.year !== filters.year) return false;
+    if (filters.region && filters.region !== "全部区域" && task.region !== filters.region) return false;
+    if (filters.project && filters.project !== "全部项目" && task.project !== filters.project) return false;
+    if (filters.status && filters.status !== "全部状态" && task.status !== filters.status) return false;
+    if (filters.owner && filters.owner !== "全部责任人" && task.owner !== filters.owner) return false;
+    if (filters.type && filters.type !== "全部" && task.type !== filters.type) return false;
+    return true;
+  });
+}
+
+function specialtyStatusClass(status) {
+  return {
+    "已完成": "done",
+    "进行中": "doing",
+    "逾期": "overdue",
+    "预警": "warning",
+    "未开始": "pending",
+  }[status] || "pending";
+}
+
+function specialtyMonthlyCount(tasks, statusName = "") {
+  return Array.from({ length: 6 }, (_, index) => {
+    const month = index + 1;
+    return tasks.filter((task) => task.start <= month && task.end >= month && (!statusName || task.status === statusName)).length;
+  });
+}
+
+function specialtyTrendChartMarkup(tasks) {
+  const months = ["1月", "2月", "3月", "4月", "5月", "6月"];
+  const series = [
+    { label: "已完成", color: "#35e3a4", values: specialtyMonthlyCount(tasks, "已完成") },
+    { label: "进行中", color: "#28a8ff", values: specialtyMonthlyCount(tasks, "进行中") },
+    { label: "逾期", color: "#ff5b70", values: specialtyMonthlyCount(tasks, "逾期") },
+  ];
+  const width = 460;
+  const height = 205;
+  const pad = { top: 24, right: 18, bottom: 32, left: 34 };
+  const chartW = width - pad.left - pad.right;
+  const chartH = height - pad.top - pad.bottom;
+  const maxValue = Math.max(5, ...series.flatMap((item) => item.values));
+  const x = (index) => pad.left + (chartW / (months.length - 1)) * index;
+  const y = (value) => pad.top + chartH - (value / maxValue) * chartH;
+  const grid = [0, 0.25, 0.5, 0.75, 1].map((ratio) => {
+    const gy = pad.top + chartH - chartH * ratio;
+    return `<line x1="${pad.left}" y1="${gy}" x2="${width - pad.right}" y2="${gy}" class="specialty-chart-grid" />`;
+  }).join("");
+  return `
+    <div class="specialty-trend-legend">
+      ${series.map((item) => `<span><i style="background:${item.color}"></i>${item.label}</span>`).join("")}
+    </div>
+    <svg class="specialty-trend-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="专业化公司月度推进趋势">
+      ${grid}
+      <line x1="${pad.left}" y1="${pad.top + chartH}" x2="${width - pad.right}" y2="${pad.top + chartH}" class="specialty-chart-axis" />
+      <line x1="${pad.left}" y1="${pad.top}" x2="${pad.left}" y2="${pad.top + chartH}" class="specialty-chart-axis" />
+      ${months.map((month, index) => `<text x="${x(index)}" y="${height - 10}" class="specialty-chart-label">${month}</text>`).join("")}
+      ${series.map((item) => {
+        const points = item.values.map((value, index) => `${x(index)},${y(value)}`).join(" ");
+        return `
+          <polyline points="${points}" fill="none" stroke="${item.color}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" />
+          ${item.values.map((value, index) => `
+            <g>
+              <circle cx="${x(index)}" cy="${y(value)}" r="6" fill="#071b3c" stroke="${item.color}" stroke-width="3" />
+              <text x="${x(index)}" y="${y(value) - 12}" class="specialty-chart-value">${value}</text>
+            </g>
+          `).join("")}
+        `;
+      }).join("")}
+    </svg>
+  `;
+}
+
+function specialtySubtaskStatus(task, index) {
+  if (task.status === "已完成") return "已完成";
+  if (task.status === "未开始") return "未开始";
+  if (task.status === "逾期" && index >= 2) return "逾期";
+  if (task.status === "预警" && index >= 2) return "预警";
+  if (index === 0) return "已完成";
+  if (index === 1 || index === 2) return "进行中";
+  return "未开始";
+}
+
+function specialtyProjectSubtasks(task) {
+  const steps = [
+    ["方案确认", "明确任务边界、验收标准和施工窗口", "区域负责人"],
+    ["资源准备", "完成备件、图纸、人员排班和安全交底", task.owner],
+    ["现场实施", "完成现场改造、调试或采购落地动作", "专业公司"],
+    ["联调复核", "开展过程复核、运行观察和质量校验", "大区对接人"],
+    ["销项归档", "上传过程证据、复核记录和验收资料", task.owner],
+  ];
+  const span = Math.max(1, task.end - task.start + 1);
+  return steps.map(([name, measure, owner], index) => {
+    const start = Math.min(12, task.start + Math.floor((span * index) / steps.length));
+    const end = Math.min(12, Math.max(start, task.start + Math.floor((span * (index + 1)) / steps.length)));
+    const status = specialtySubtaskStatus(task, index);
+    const progress = status === "已完成" ? 100 : status === "未开始" ? 0 : Math.min(95, Math.max(15, task.progress - (index - 1) * 12));
+    return {
+      name,
+      measure,
+      owner,
+      status,
+      progress,
+      start,
+      end,
+      node: `${end}月${Math.min(28, 6 + index * 5)}日`,
+    };
+  });
+}
+
+function specialtyMonthWeeklyTasks(task, month) {
+  if (month < task.start || month > task.end) return [];
+  const base = specialtyProjectSubtasks(task).filter((item) => month >= item.start && month <= item.end);
+  const seedTasks = base.length ? base : specialtyProjectSubtasks(task).slice(1, 4);
+  return seedTasks.slice(0, 4).map((item, index) => {
+    const status = index === 0 && task.status !== "未开始" ? "已完成" : item.status;
+    return {
+      week: `第${index + 1}周`,
+      task: item.name,
+      measure: item.measure,
+      owner: item.owner,
+      node: `${month}月${Math.min(28, 5 + index * 7)}日`,
+      status,
+      progress: status === "已完成" ? 100 : status === "未开始" ? 0 : Math.min(90, Math.max(20, item.progress)),
+    };
+  });
+}
+
+function specialtyProjectMonthStatus(task, month) {
+  if (month < task.start || month > task.end) return "无任务";
+  return task.status;
+}
+
+function specialtyProjectGanttMarkup(taskId, selectedMonth = "") {
+  const task = specialtyTasks.find((item) => item.id === taskId) || specialtyTasks[0];
+  const month = Number(selectedMonth) || task.start;
+  const subtasks = specialtyProjectSubtasks(task);
+  const weeklyTasks = specialtyMonthWeeklyTasks(task, month);
+  const statusClass = specialtyStatusClass(task.status);
+  return `
+    <section class="specialty-project-detail">
+      <div class="specialty-project-top">
+        <button class="ghost-btn" type="button" data-specialty-project-back>← 返回业务汇总</button>
+        <div>
+          <h3>${safeText(task.project)} · ${safeText(task.name)}</h3>
+          <p>${safeText(task.region)} · ${safeText(task.type)} · ${task.year}</p>
+        </div>
+        <span class="specialty-status ${statusClass}">${task.status}</span>
+      </div>
+      <div class="specialty-project-kpis">
+        <article><span>责任人</span><strong>${safeText(task.owner)}</strong></article>
+        <article><span>整体进度</span><strong>${task.progress}%</strong></article>
+        <article><span>计划周期</span><strong>${task.start}月-${task.end}月</strong></article>
+        <article><span>风险提示</span><strong>${task.status === "逾期" ? `逾期${task.overdueDays || 3}天` : task.status === "预警" ? `预警${task.warningDays || 5}天` : "正常跟踪"}</strong></article>
+      </div>
+      <section class="specialty-year-overview">
+        <div class="panel-head">
+          <h3>项目年度整体进度</h3>
+          <span>点击月份切换周维度任务甘特图</span>
+        </div>
+        <div class="specialty-month-strip">
+          ${Array.from({ length: 12 }, (_, index) => {
+            const itemMonth = index + 1;
+            const status = specialtyProjectMonthStatus(task, itemMonth);
+            const active = itemMonth === month;
+            return `
+              <button class="${active ? "active" : ""} ${specialtyStatusClass(status)}" type="button" data-specialty-project-month="${itemMonth}" data-specialty-task-id="${task.id}">
+                <strong>${itemMonth}月</strong>
+                <span>${status}</span>
+              </button>
+            `;
+          }).join("")}
+        </div>
+        <div class="specialty-project-gantt">
+          <div class="specialty-project-gantt-row specialty-project-gantt-head">
+            <strong>任务事项</strong>
+            ${Array.from({ length: 12 }, (_, index) => `<strong>${index + 1}月</strong>`).join("")}
+          </div>
+          ${subtasks.map((item) => `
+            <div class="specialty-project-gantt-row">
+              <div class="specialty-subtask-title">
+                <b>${safeText(item.name)}</b>
+                <span>${safeText(item.measure)}</span>
+              </div>
+              ${Array.from({ length: 12 }, (_, index) => {
+                const itemMonth = index + 1;
+                const active = itemMonth >= item.start && itemMonth <= item.end;
+                return `<span>${active ? `<i class="${specialtyStatusClass(item.status)}">${item.progress}%</i>` : ""}</span>`;
+              }).join("")}
+            </div>
+          `).join("")}
+        </div>
+      </section>
+      <section class="specialty-week-overview">
+        <div class="panel-head">
+          <h3>${month}月周维度甘特图</h3>
+          <span>按周跟踪任务、措施、负责人和完成节点</span>
+        </div>
+        ${weeklyTasks.length ? `
+          <div class="specialty-week-gantt">
+            <div class="specialty-week-row specialty-week-head"><strong>任务</strong><strong>第1周</strong><strong>第2周</strong><strong>第3周</strong><strong>第4周</strong></div>
+            ${weeklyTasks.map((item, index) => `
+              <div class="specialty-week-row">
+                <div><b>${safeText(item.task)}</b><span>${safeText(item.measure)}</span></div>
+                ${Array.from({ length: 4 }, (_, weekIndex) => `<span>${weekIndex === index ? `<i class="${specialtyStatusClass(item.status)}">${item.week}</i>` : ""}</span>`).join("")}
+              </div>
+            `).join("")}
+          </div>
+          <div class="specialty-week-table">
+            <div class="specialty-week-table-head"><span>周次</span><span>任务</span><span>措施</span><span>负责人</span><span>任务完成节点</span><span>当前完成情况</span></div>
+            ${weeklyTasks.map((item) => `
+              <div class="specialty-week-table-row">
+                <span>${item.week}</span>
+                <span>${safeText(item.task)}</span>
+                <span>${safeText(item.measure)}</span>
+                <span>${safeText(item.owner)}</span>
+                <span>${safeText(item.node)}</span>
+                <span><em class="specialty-status ${specialtyStatusClass(item.status)}">${item.status}</em></span>
+              </div>
+            `).join("")}
+          </div>
+        ` : `<div class="specialty-empty">该月份暂无项目任务，建议查看 ${task.start}月-${task.end}月计划周期。</div>`}
+      </section>
+    </section>
+  `;
+}
+
+function renderSpecialtyProjectGantt(taskId, month = "") {
+  const content = $("#specialtyContent");
+  if (!content) return;
+  content.innerHTML = specialtyProjectGanttMarkup(taskId, month);
+  content.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function renderSpecialtyProjectOptions(regionName = "全部区域", selectedProject = "全部项目") {
+  const projects = specialtyProjectsForRegion(regionName);
+  return [`<option value="全部项目">全部项目</option>`]
+    .concat(projects.map((project) => `<option value="${safeText(project)}" ${project === selectedProject ? "selected" : ""}>${safeText(project)}</option>`))
+    .join("");
+}
+
+function specialtySummaryCards(tasks) {
+  const total = tasks.length;
+  const done = tasks.filter((task) => task.status === "已完成").length;
+  const doing = tasks.filter((task) => task.status === "进行中").length;
+  const overdue = tasks.filter((task) => task.status === "逾期").length;
+  const warning = tasks.filter((task) => task.status === "预警").length;
+  const pending = tasks.filter((task) => task.status === "未开始").length;
+  const rate = total ? Math.round((done / total) * 100) : 0;
+  return `
+    <section class="specialty-summary-card">
+      <div class="panel-head">
+        <h3>工程任务总览</h3>
+        <span>筛选后口径</span>
+      </div>
+      <div class="specialty-mini-grid">
+        ${[
+          ["年度任务总数", total, "folder"],
+          ["已完成", done, "check"],
+          ["进行中", doing, "clock"],
+          ["逾期", overdue, "alarm"],
+          ["未开始", pending, "user"],
+          ["完成率", `${rate}%`, "pie"],
+        ].map(([label, value, type]) => `
+          <article class="specialty-mini ${type}">
+            <i></i>
+            <span>${label}</span>
+            <strong>${value}</strong>
+          </article>
+        `).join("")}
+      </div>
+    </section>
+    <section class="specialty-progress-card">
+      <h3>当前进度情况</h3>
+      <div class="specialty-donut" style="--value:${rate}%">
+        <b>${rate}%</b>
+        <span>当前整体进度</span>
+      </div>
+      <p>较上月 <em>${rate >= 55 ? "↑ 8%" : "↓ 3%"}</em></p>
+    </section>
+    <section class="specialty-trend-card">
+      <div class="panel-head">
+        <h3>月度推进趋势</h3>
+        <span>1-6月</span>
+      </div>
+      ${specialtyTrendChartMarkup(tasks)}
+    </section>
+    <section class="specialty-risk-card">
+      <div class="panel-head">
+        <h3>逾期与预警</h3>
+        <span>重点关注</span>
+      </div>
+      <div class="specialty-risk-numbers">
+        <article><b>${overdue}</b><span>逾期任务数</span></article>
+        <article><b>${warning}</b><span>预警任务数</span></article>
+      </div>
+      <div class="specialty-risk-list">
+        ${tasks.filter((task) => ["逾期", "预警"].includes(task.status)).slice(0, 5).map((task) => `
+          <p><i class="${specialtyStatusClass(task.status)}"></i><strong>${safeText(task.name)}</strong><span>${task.status === "逾期" ? `逾期 ${task.overdueDays || 3}天` : `预警 ${task.warningDays || 5}天`}</span></p>
+        `).join("") || `<p><i class="done"></i><strong>暂无重点风险</strong><span>保持跟踪</span></p>`}
+      </div>
+    </section>
+  `;
+}
+
+function specialtyGanttMarkup(tasks, selectedType = "全部") {
+  const rows = selectedType === "全部" ? tasks : tasks.filter((task) => task.type === selectedType);
+  return `
+    <section class="specialty-gantt-panel">
+      <div class="panel-head specialty-gantt-head">
+        <div>
+          <h3>年度任务甘特图</h3>
+          <span>按任务状态显示全年计划和推进情况</span>
+        </div>
+        <label>
+          任务类型筛选
+          <select id="specialtyTypeSelect">
+            ${["全部", ...specialtyTaskTypes].map((type) => `<option value="${type}" ${type === selectedType ? "selected" : ""}>${type}</option>`).join("")}
+          </select>
+        </label>
+      </div>
+      <div class="specialty-gantt-legend">
+        <span><i class="done"></i>已完成</span>
+        <span><i class="doing"></i>进行中</span>
+        <span><i class="overdue"></i>逾期</span>
+        <span><i class="warning"></i>预警</span>
+        <span><i class="pending"></i>未开始</span>
+      </div>
+      <div class="specialty-gantt-scroll">
+        <div class="specialty-gantt">
+          <div class="specialty-gantt-row specialty-gantt-header">
+            <strong>序号</strong><strong>项目 / 任务</strong><strong>责任人</strong><strong>任务状态</strong>
+            ${Array.from({ length: 12 }, (_, index) => `<strong>${index + 1}月</strong>`).join("")}
+          </div>
+          ${rows.map((task, index) => `
+            <div class="specialty-gantt-row">
+              <span>${index + 1}</span>
+              <button class="specialty-task-link" type="button" data-specialty-task-detail="${task.id}" data-floating-tip="${safeText(`${task.region} · ${task.project} · ${task.type} · 完成度 ${task.progress}%`)}">
+                <strong>${safeText(task.project)}</strong>
+                <small>${safeText(task.name)}</small>
+              </button>
+              <span>${safeText(task.owner)}</span>
+              <span><em class="specialty-status ${specialtyStatusClass(task.status)}">${task.status}</em></span>
+              ${Array.from({ length: 12 }, (_, monthIndex) => {
+                const month = monthIndex + 1;
+                const active = month >= task.start && month <= task.end;
+                return `<span class="specialty-month-cell">${active ? `<i class="${specialtyStatusClass(task.status)}" title="${safeText(task.name)} · ${task.progress}%"></i>` : ""}</span>`;
+              }).join("")}
+            </div>
+          `).join("") || `<div class="specialty-empty">当前筛选条件下暂无任务</div>`}
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function specialtyContentMarkup(filters = specialtyFilterState()) {
+  const tasks = specialtyFilteredTasks(filters);
+  return `
+    <section class="specialty-overview-grid">${specialtySummaryCards(tasks)}</section>
+    ${specialtyGanttMarkup(tasks, filters.type || "全部")}
+  `;
+}
+
+function updateSpecialtyContent() {
+  const content = $("#specialtyContent");
+  if (!content) return;
+  content.innerHTML = specialtyContentMarkup(specialtyFilterState());
+}
+
+function renderSpecialtyModule(item) {
+  $("#moduleDetail").innerHTML = `
+    <div class="specialty-page">
+      <div class="specialty-titlebar">
+        <button class="ghost-btn" data-view-jump="cockpit">← 返回驾驶舱</button>
+        <h2>${item.name}</h2>
+        <div class="specialty-user-tools">
+          <span>2025-05-26</span>
+          <span>系统运行正常</span>
+          <button class="ghost-btn" type="button">刷新</button>
+        </div>
+      </div>
+
+      <section class="specialty-hero-switch">
+        <button class="active" type="button">
+          <i>▥</i>
+          <span><strong>业务汇总</strong><small>总览业务进展与任务执行情况</small></span>
+          <b>›</b>
+        </button>
+        <button type="button">
+          <i>☵</i>
+          <span><strong>任务交互</strong><small>任务沟通与协同处理中心</small></span>
+          <b>›</b>
+        </button>
+      </section>
+
+      <section class="specialty-filter-panel">
+        <label>年份
+          <select id="specialtyYearSelect">
+            ${["所有", "2025年", "2026年"].map((year) => `<option>${year}</option>`).join("")}
+          </select>
+        </label>
+        <label>区域
+          <select id="specialtyRegionSelect">
+            <option>全部区域</option>
+            ${Object.keys(projectRegionCatalog).map((region) => `<option>${region}</option>`).join("")}
+          </select>
+        </label>
+        <label>项目
+          <select id="specialtyProjectSelect">${renderSpecialtyProjectOptions("全部区域")}</select>
+        </label>
+        <label>任务状态
+          <select id="specialtyStatusSelect">
+            <option>全部状态</option>
+            ${specialtyStatuses.map((status) => `<option>${status}</option>`).join("")}
+          </select>
+        </label>
+        <label>责任人
+          <select id="specialtyOwnerSelect">
+            <option>全部责任人</option>
+            ${specialtyOwners.map((owner) => `<option>${owner}</option>`).join("")}
+          </select>
+        </label>
+        <button class="primary-btn" type="button" data-specialty-search>查询</button>
+        <button class="ghost-btn" type="button" data-specialty-reset>重置</button>
+      </section>
+
+      <div id="specialtyContent">${specialtyContentMarkup({ year: "所有", region: "全部区域", project: "全部项目", status: "全部状态", owner: "全部责任人", type: "全部" })}</div>
+    </div>
+  `;
+}
+
 function renderIntensiveModule(item) {
   $("#moduleDetail").innerHTML = `
     <div class="star-page intensive-page">
@@ -5100,6 +5652,13 @@ function openModule(moduleId) {
     window.scrollTo({ top: 0, behavior: "smooth" });
     return;
   }
+  if (moduleId === "water") {
+    renderSpecialtyModule(item);
+    $$(".nav-item").forEach((nav) => nav.classList.toggle("active", nav.dataset.module === moduleId));
+    $$(".view").forEach((view) => view.classList.toggle("active", view.id === "moduleDetail"));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    return;
+  }
   if (moduleId === "data-push") {
     renderDataPushModule(item);
     $$(".nav-item").forEach((nav) => nav.classList.toggle("active", nav.dataset.module === moduleId));
@@ -5211,6 +5770,7 @@ function bindEvents() {
     const starAreaMetric = event.target.closest("[data-star-area-metric]");
     const bulletinSort = event.target.closest("[data-bulletin-sort]");
     const regionMetric = event.target.closest("[data-region-metric]");
+    const projectMetric = event.target.closest("[data-project-metric]");
     const openPermissionModal = event.target.closest("[data-open-permission-modal]");
     const closePermissionModal = event.target.closest("[data-close-permission-modal]");
     const openPermissionRules = event.target.closest("[data-open-permission-rules]");
@@ -5234,6 +5794,11 @@ function bindEvents() {
     const weekTask = event.target.closest("[data-week-task][data-week-project][data-week-month]");
     const monthButton = event.target.closest("[data-project][data-month]");
     const projectMonthButton = event.target.closest("[data-project-month][data-project-id]");
+    const specialtySearch = event.target.closest("[data-specialty-search]");
+    const specialtyReset = event.target.closest("[data-specialty-reset]");
+    const specialtyTaskDetail = event.target.closest("[data-specialty-task-detail]");
+    const specialtyProjectBack = event.target.closest("[data-specialty-project-back]");
+    const specialtyProjectMonth = event.target.closest("[data-specialty-project-month][data-specialty-task-id]");
     const moduleButton = event.target.closest("[data-module]");
     const viewButton = event.target.closest("[data-view-jump], [data-view]");
     if (assistantEntry) {
@@ -5371,6 +5936,15 @@ function bindEvents() {
       $("#regionRankingContent").scrollIntoView({ behavior: "smooth", block: "start" });
       return;
     }
+    if (projectMetric) {
+      const metricId = projectMetric.dataset.projectMetric;
+      const regionName = $("#projectRegionSelect")?.value || "杭湖区域公司";
+      const projectName = $("#projectSelect")?.value || "湖州光正";
+      $("#projectMetricCards").innerHTML = renderProjectMetricCards(regionName, projectName, metricId);
+      $("#projectMetricContent").innerHTML = projectMetricAnalysisMarkup(regionName, projectName, metricId);
+      $("#projectMetricContent").scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
     if (projectOverview) {
       renderProjectAnnualGantt(projectOverview.dataset.projectOverview);
       return;
@@ -5482,6 +6056,38 @@ function bindEvents() {
       updateProjectMonth(projectMonthButton.dataset.projectId, projectMonthButton.dataset.projectMonth);
       return;
     }
+    if (specialtyTaskDetail) {
+      renderSpecialtyProjectGantt(specialtyTaskDetail.dataset.specialtyTaskDetail);
+      return;
+    }
+    if (specialtyProjectBack) {
+      updateSpecialtyContent();
+      return;
+    }
+    if (specialtyProjectMonth) {
+      renderSpecialtyProjectGantt(specialtyProjectMonth.dataset.specialtyTaskId, specialtyProjectMonth.dataset.specialtyProjectMonth);
+      return;
+    }
+    if (specialtySearch) {
+      updateSpecialtyContent();
+      return;
+    }
+    if (specialtyReset) {
+      const year = $("#specialtyYearSelect");
+      const region = $("#specialtyRegionSelect");
+      const project = $("#specialtyProjectSelect");
+      const status = $("#specialtyStatusSelect");
+      const owner = $("#specialtyOwnerSelect");
+      const type = $("#specialtyTypeSelect");
+      if (year) year.value = "所有";
+      if (region) region.value = "全部区域";
+      if (project) project.innerHTML = renderSpecialtyProjectOptions("全部区域");
+      if (status) status.value = "全部状态";
+      if (owner) owner.value = "全部责任人";
+      if (type) type.value = "全部";
+      updateSpecialtyContent();
+      return;
+    }
     if (moduleButton) {
       openModule(moduleButton.dataset.module);
       return;
@@ -5512,6 +6118,16 @@ function bindEvents() {
       const regionName = event.target.value;
       $("#regionMetricCards").innerHTML = renderRegionMetricCards(regionName, "quant");
       $("#regionRankingContent").innerHTML = regionMetricAnalysisMarkup(regionName, "quant");
+      return;
+    }
+    if (event.target.id === "specialtyRegionSelect") {
+      const projectSelect = $("#specialtyProjectSelect");
+      if (projectSelect) projectSelect.innerHTML = renderSpecialtyProjectOptions(event.target.value);
+      updateSpecialtyContent();
+      return;
+    }
+    if (["specialtyYearSelect", "specialtyProjectSelect", "specialtyStatusSelect", "specialtyOwnerSelect", "specialtyTypeSelect"].includes(event.target.id)) {
+      updateSpecialtyContent();
       return;
     }
     if (["starTaskBoardMode", "starTaskBoardRank", "starTaskBoardRegionSelect"].includes(event.target.id)) {
