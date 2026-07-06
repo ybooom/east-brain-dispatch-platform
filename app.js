@@ -4995,7 +4995,7 @@ function specialtyProjectGanttMarkup(taskId, selectedMonth = "") {
           `).join("")}
         </div>
       </section>
-      <section class="specialty-week-overview">
+      <section class="specialty-week-overview" id="specialtyMonthGantt">
         <div class="panel-head">
           <h3>${month}月周维度甘特图</h3>
           <span>按周跟踪任务、措施、负责人和完成节点</span>
@@ -5029,11 +5029,14 @@ function specialtyProjectGanttMarkup(taskId, selectedMonth = "") {
   `;
 }
 
-function renderSpecialtyProjectGantt(taskId, month = "") {
+function renderSpecialtyProjectGantt(taskId, month = "", options = {}) {
   const content = $("#specialtyContent");
   if (!content) return;
   content.innerHTML = specialtyProjectGanttMarkup(taskId, month);
-  content.scrollIntoView({ behavior: "smooth", block: "start" });
+  const target = options.scrollToMonth ? $("#specialtyMonthGantt") : content;
+  requestAnimationFrame(() => {
+    target?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
 }
 
 function renderSpecialtyProjectOptions(regionName = "全部区域", selectedProject = "全部项目") {
@@ -5166,10 +5169,621 @@ function specialtyContentMarkup(filters = specialtyFilterState()) {
   `;
 }
 
-function updateSpecialtyContent() {
+function specialtyInteractionCards(tasks) {
+  const todoUpdate = tasks.filter((task) => ["进行中", "预警", "逾期"].includes(task.status)).length;
+  const needCheck = tasks.filter((task) => task.progress >= 60 && task.status !== "已完成").length;
+  const needCoordinate = tasks.filter((task) => ["预警", "逾期"].includes(task.status)).length;
+  const archiveCount = tasks.filter((task) => task.progress >= 80 || task.status === "已完成").length;
+  return [
+    ["submit", "工程提报", "待提报", 8, ["新增工程需求", "补充立项资料", "确认责任边界"]],
+    ["update", "进度更新", "待更新", todoUpdate, ["填报本周进展", "同步现场照片", "补充偏差说明"]],
+    ["review", "进度核定", "待核定", needCheck, ["复核计划偏差", "确认完成比例", "形成核定意见"]],
+    ["coordinate", "事项协调", "待协调", needCoordinate, ["处理跨专业卡点", "确认资源到位", "跟踪紧急事项"]],
+    ["archive", "档案库", "待归档", archiveCount, ["上传验收记录", "整理过程资料", "关闭归档清单"]],
+  ];
+}
+
+function specialtyInteractionStats(tasks) {
+  const total = tasks.length;
+  const doing = tasks.filter((task) => task.status === "进行中").length;
+  const waitingUpdate = tasks.filter((task) => task.status !== "已完成" && task.progress < 75).length;
+  const waitingCheck = tasks.filter((task) => task.progress >= 60 && task.status !== "已完成").length;
+  const waitingCoordinate = tasks.filter((task) => ["预警", "逾期"].includes(task.status)).length;
+  const accepted = tasks.filter((task) => task.progress >= 80 || task.status === "已完成").length;
+  const rate = total ? Math.round((accepted / total) * 100) : 0;
+  return [
+    ["在建工程", total, "个", "building"],
+    ["待提报", waitingUpdate, "项", "doc"],
+    ["待更新", doing + waitingUpdate, "项", "rise"],
+    ["待核定", waitingCheck, "项", "shield"],
+    ["待协调", waitingCoordinate, "项", "team"],
+    ["验收完成率", `${rate}%`, "", "ring"],
+  ];
+}
+
+function specialtyInteractionWorkflowMarkup() {
+  const steps = [
+    ["工程提报", "提交工程提报维编"],
+    ["周度更新", "填报本周完成事项及所需"],
+    ["进度核定", "核定周度进度与计划偏差"],
+    ["偏差识别", "自动识别问题/风险"],
+    ["协同处置", "责任人确认闭环处理"],
+    ["验收归档", "形成存档归档备案"],
+  ];
+  return `
+    <section class="specialty-workflow-card">
+      <div class="specialty-section-title"><i></i><h3>全过程闭环流程</h3></div>
+      <div class="specialty-flowline">
+        ${steps.map(([name, desc], index) => `
+          <article>
+            <b>${index + 1}</b>
+            <strong>${safeText(name)}</strong>
+            <span>${safeText(desc)}</span>
+          </article>
+        `).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function specialtyLedgerRows(tasks) {
+  const phases = ["实施开工", "方案设计", "实施施工", "联调测试", "验收准备"];
+  const archiveStatus = ["部分归档", "待归档", "未归档"];
+  return tasks.slice(0, 8).map((task, index) => {
+    const risk = task.status === "逾期" ? "超期" : task.status === "预警" ? "预警" : "正常";
+    return {
+      index: index + 1,
+      name: task.name,
+      region: task.region.replace("区域公司", "区域"),
+      phase: phases[index % phases.length],
+      progress: task.progress,
+      check: task.progress >= 60 ? "是" : "否",
+      risk,
+      archive: task.status === "已完成" ? "已归档" : archiveStatus[index % archiveStatus.length],
+      owner: task.owner,
+    };
+  });
+}
+
+function specialtyInteractionTableMarkup(tasks) {
+  return `
+    <section class="specialty-ledger-card">
+      <div class="specialty-section-title"><i></i><h3>工程交互台账</h3></div>
+      <div class="specialty-ledger-table">
+        <div class="specialty-ledger-head">
+          <span>序号</span><span>工程名称</span><span>区域</span><span>当前阶段</span><span>进度进展</span><span>待核定</span><span>风险状态</span><span>偏差状态</span><span>责任人</span><span>操作</span>
+        </div>
+        ${specialtyLedgerRows(tasks).map((row) => `
+          <div class="specialty-ledger-row">
+            <span>${row.index}</span>
+            <strong>${safeText(row.name)}</strong>
+            <span>${safeText(row.region)}</span>
+            <span>${safeText(row.phase)}</span>
+            <span><i class="ledger-progress"><em style="width:${row.progress}%"></em></i><b>${row.progress}%</b></span>
+            <span>${row.check}</span>
+            <span><em class="specialty-status ${row.risk === "超期" ? "overdue" : row.risk === "预警" ? "warning" : "done"}">${row.risk}</em></span>
+            <span><em class="archive-pill">${safeText(row.archive)}</em></span>
+            <span>${safeText(row.owner)}</span>
+            <span class="ledger-actions"><button type="button">查看</button><button type="button">更新</button><button type="button">归档</button></span>
+          </div>
+        `).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function specialtySideListMarkup(title, icon, rows) {
+  return `
+    <section class="specialty-side-card">
+      <div class="panel-head">
+        <h3><i>${icon}</i>${title}</h3>
+        <button type="button">查看更多 ›</button>
+      </div>
+      <div class="specialty-side-list">
+        ${rows.map((row, index) => `
+          <article>
+            <b>${index + 1}</b>
+            <strong>${safeText(row.title)}</strong>
+            <em class="${row.tone || ""}">${safeText(row.tag)}</em>
+            <span>${safeText(row.owner || "")}</span>
+          </article>
+        `).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function specialtyWorkspaceHeaderMarkup(title, desc, stats = []) {
+  return `
+    <section class="specialty-workspace-head">
+      <button class="ghost-btn" type="button" data-specialty-workspace-back>← 返回任务交互</button>
+      <div>
+        <p class="eyebrow">任务交互 / ${safeText(title)}</p>
+        <h3>${safeText(title)}</h3>
+        <span>${safeText(desc)}</span>
+      </div>
+      <div class="specialty-workspace-stats">
+        ${stats.map(([label, value]) => `<article><span>${safeText(label)}</span><strong>${safeText(value)}</strong></article>`).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function specialtyField(label, control, required = false) {
+  return `<label class="specialty-field"><span>${required ? "<b>*</b>" : ""}${safeText(label)}</span>${control}</label>`;
+}
+
+function specialtyInput(placeholder = "", value = "") {
+  return `<input value="${safeText(value)}" placeholder="${safeText(placeholder)}" />`;
+}
+
+function specialtySelect(options = []) {
+  return `<select>${options.map((option) => `<option>${safeText(option)}</option>`).join("")}</select>`;
+}
+
+function specialtyTextarea(placeholder = "", value = "") {
+  return `<textarea placeholder="${safeText(placeholder)}">${safeText(value)}</textarea>`;
+}
+
+function specialtyUploadBox(title, desc) {
+  return `
+    <button class="specialty-upload-box" type="button" data-specialty-upload="${safeText(title)}">
+      <strong>${safeText(title)}</strong>
+      <span>${safeText(desc)}</span>
+      <small>支持 PDF / Word / Excel / PNG，单个文件不超过 50MB</small>
+    </button>
+  `;
+}
+
+function specialtyMiniGanttMarkup(title = "AI生成工程甘特图") {
+  const rows = [
+    ["方案编制", "张三", "05-19", "06-05", 8, 20, "done"],
+    ["预算确认", "李四", "06-06", "06-20", 22, 36, "done"],
+    ["采购准备", "王五", "06-21", "07-10", 38, 53, "doing"],
+    ["施工实施", "赵六", "07-11", "09-30", 55, 86, "doing"],
+    ["联调测试", "钱七", "10-01", "10-20", 88, 96, "pending"],
+    ["验收归档", "周九", "11-06", "11-20", 96, 100, "pending"],
+  ];
+  return `
+    <section class="specialty-work-card specialty-gantt-editor">
+      <div class="panel-head">
+        <h3>${safeText(title)}</h3>
+        <div class="specialty-inline-actions"><button type="button" data-specialty-action="AI重新生成甘特图">AI重新生成</button><button type="button" data-specialty-action="添加甘特图节点">添加节点</button><button type="button" data-specialty-action="保存甘特图调整">保存调整</button></div>
+      </div>
+      <div class="specialty-gantt-editor-table">
+        <div class="specialty-gantt-editor-head"><span>任务名称</span><span>负责人</span><span>开始</span><span>完成</span><span>计划周期</span><span>操作</span></div>
+        ${rows.map(([name, owner, start, end, left, right, status]) => `
+          <div class="specialty-gantt-editor-row">
+            <span>${safeText(name)}</span><span>${safeText(owner)}</span><span>${safeText(start)}</span><span>${safeText(end)}</span>
+            <span><i class="gantt-line"><em class="${status}" style="left:${left}%;width:${Math.max(6, right - left)}%"></em></i></span>
+            <span><button type="button" data-specialty-action="编辑甘特图节点：${safeText(name)}">编辑</button><button type="button" data-specialty-action="删除甘特图节点：${safeText(name)}">删除</button></span>
+          </div>
+        `).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function specialtySubmitWorkspaceMarkup() {
+  return `
+    <section class="specialty-workspace-page">
+      ${specialtyWorkspaceHeaderMarkup("工程提报", "填写工程基础信息、预算方案、工程计划，并由 AI 生成可编辑甘特图。", [["待提报", "8项"], ["草稿", "3份"], ["AI生成", "可编辑"]])}
+      <div class="specialty-workspace-grid submit-layout">
+        <section class="specialty-work-card">
+          <div class="specialty-section-title"><i></i><h3>工程提报信息</h3></div>
+          <div class="specialty-form-grid">
+            ${specialtyField("工程名称", specialtyInput("请输入工程名称", "维塘自控改造工程"), true)}
+            ${specialtyField("工程类别", specialtySelect(["自控工程", "技改工程", "大修重置", "日常维护维修"]), true)}
+            ${specialtyField("所属区域", specialtySelect(["杭湖区域公司", "济宁区域公司", "苏皖业务区", "北京建工环境"]), true)}
+            ${specialtyField("所属项目", specialtySelect(["湖州光正", "曲阜嘉诚", "南京荣泰", "昆山花桥"]), true)}
+            ${specialtyField("责任人", specialtySelect(specialtyOwners), true)}
+            ${specialtyField("施工负责人", specialtyInput("请输入施工负责人", "李四"), true)}
+            ${specialtyField("计划开始时间", specialtyInput("2025-05-19"), true)}
+            ${specialtyField("计划完成时间", specialtyInput("2025-11-20"), true)}
+            ${specialtyField("预算金额", specialtyInput("请输入预算金额，单位：万元", "86"), true)}
+            ${specialtyField("优先级", specialtySelect(["高", "中", "低"]), true)}
+            ${specialtyField("工程详情", specialtyTextarea("描述工程范围、建设内容、现场条件和关键限制", "完成控制柜、PLC接线、SCADA画面联调及验收资料归档。"), true)}
+            ${specialtyField("资源需求", specialtyTextarea("列出人力、设备、材料、跨专业协同等需求", "需要自控工程师2名、现场施工班组1组、PLC模块及网关设备。"), true)}
+          </div>
+        </section>
+        <aside class="specialty-work-card specialty-side-note">
+          <div class="specialty-section-title"><i></i><h3>提报材料</h3></div>
+          ${specialtyUploadBox("预算方案提交区", "上传预算测算、报价依据和审批版预算")}
+          ${specialtyUploadBox("施工方案提交区", "上传施工组织、停水停电窗口和安全措施")}
+          ${specialtyUploadBox("工程甘特图提交区", "可上传已有甘特图，也可使用 AI 生成")}
+          <div class="specialty-ai-rule"><strong>AI生成规则</strong><p>系统将基于工程名称、预算、施工窗口、资源需求和关键节点生成甘特图。生成后可手工增删节点，最终同步到业务汇总甘特图。</p></div>
+        </aside>
+      </div>
+      ${specialtyMiniGanttMarkup()}
+      <div class="specialty-work-actions"><button class="ghost-btn" type="button" data-specialty-action="保存工程提报草稿">保存草稿</button><button class="text-btn" type="button" data-specialty-action="AI生成工程甘特图">AI生成甘特图</button><button class="primary-btn" type="button" data-specialty-action="提交工程提报">提交提报</button></div>
+    </section>
+  `;
+}
+
+function specialtyUpdateWorkspaceMarkup() {
+  const tasks = [
+    ["设备到货确认", "100%", "正常", "05-19 至 05-20", "王五"],
+    ["控制柜安装", "90%", "正常", "05-20 至 05-22", "李四"],
+    ["PLC接线", "75%", "预警", "05-21 至 05-23", "赵六"],
+    ["SCADA联调", "60%", "滞后", "05-23 至 05-25", "李四"],
+    ["试运行", "0%", "未开始", "05-26 至 05-27", "张三"],
+  ];
+  return `
+    <section class="specialty-workspace-page">
+      ${specialtyWorkspaceHeaderMarkup("进度更新", "专业化公司每周填报任务进度、施工日期、偏差说明和资源协调需求。", [["本周任务", "12项"], ["待更新", "5项"], ["滞后事项", "2项"]])}
+      <div class="specialty-workspace-grid update-layout">
+        <section class="specialty-work-card">
+          <div class="specialty-section-title"><i></i><h3>周度进度填报</h3></div>
+          <div class="specialty-form-grid compact">
+            ${specialtyField("当前工程", specialtySelect(["维塘自控改造工程", "炼油区域改造", "河西污水厂扩容工程"]), true)}
+            ${specialtyField("填报周期", specialtyInput("2025-05-19 ~ 2025-05-25（第21周）"), true)}
+            ${specialtyField("本周施工日期", specialtyInput("05-19、05-20、05-21、05-22、05-23"), true)}
+            ${specialtyField("当前阶段", specialtySelect(["设备安装调试阶段", "方案设计", "施工实施", "联调测试"]), true)}
+            ${specialtyField("负责人", specialtySelect(specialtyOwners), true)}
+            ${specialtyField("施工负责人", specialtyInput("李四"), true)}
+            ${specialtyField("施工班组/施工人", specialtyInput("自控安装班组A组（8人）"), true)}
+            ${specialtyField("本周完成比例", specialtyInput("68%"), true)}
+            ${specialtyField("本周完成内容", specialtyTextarea("填写已完成任务、现场进度、过程证据", "完成控制柜安装、PLC接线及部分点位调试，联动测试通过。"), true)}
+            ${specialtyField("下周计划", specialtyTextarea("填写下周任务、目标节点和预计完成时间", "完成SCADA联调及系统联动测试，准备试运行。"), true)}
+            ${specialtyField("是否出现滞后偏差", specialtySelect(["否", "是"]), true)}
+            ${specialtyField("滞后原因", specialtyInput("如有滞后请填写原因"))}
+            ${specialtyField("是否需要资源协调", specialtySelect(["否", "是"]), true)}
+            ${specialtyField("资源协调类型", specialtySelect(["人力", "设备", "材料", "跨专业", "审批"]))}
+          </div>
+          <div class="specialty-upload-row">${specialtyUploadBox("附件上传", "现场照片、周报、施工记录、问题清单")}</div>
+        </section>
+        <aside class="specialty-work-card">
+          <div class="specialty-section-title"><i></i><h3>填报提醒</h3></div>
+          <ol class="specialty-tip-list">
+            <li>每周日前完成本周进度更新。</li>
+            <li>进度偏差需说明原因并提出纠偏措施。</li>
+            <li>如需资源协调，请在本周内发起事项。</li>
+            <li>附件建议包含现场照片、周报和施工记录。</li>
+          </ol>
+          <div class="specialty-history-mini"><strong>历史更新</strong><p>05-19 已提交 · 05-12 已提交 · 05-05 已提交</p></div>
+        </aside>
+      </div>
+      <section class="specialty-work-card">
+        <div class="panel-head"><h3>本周任务与甘特图更新</h3><span class="muted">按原定周任务逐项更新</span></div>
+        <div class="specialty-week-update-table">
+          <div><span>任务名称</span><span>进度</span><span>状态</span><span>施工日期</span><span>负责人</span><span>操作</span></div>
+          ${tasks.map(([name, rate, status, date, owner]) => `<div><span>${name}</span><strong>${rate}</strong><em class="${status === "滞后" ? "overdue" : status === "预警" ? "warning" : "done"}">${status}</em><span>${date}</span><span>${owner}</span><button type="button" data-specialty-action="更新周任务：${safeText(name)}">更新</button></div>`).join("")}
+        </div>
+      </section>
+      <div class="specialty-work-actions"><button class="ghost-btn" type="button" data-specialty-action="暂存进度更新">暂存</button><button class="primary-btn" type="button" data-specialty-action="提交进度更新">提交更新</button><button class="text-btn" type="button" data-specialty-action="发起资源协调">发起协调</button></div>
+    </section>
+  `;
+}
+
+function specialtyReviewWorkspaceMarkup() {
+  const reviewRows = [
+    ["工期进度", "计划 65%", "上报 62%", "偏差 -3%", "待确认"],
+    ["关键节点", "完成 2/4", "PLC接线已完成", "节点说明完整", "通过"],
+    ["任务内容", "设备安装调试", "现场记录已上传", "需复核照片", "待补充"],
+    ["风险说明", "无重大风险", "联调存在接口风险", "需同步协调", "需介入"],
+    ["附件资料", "周报/照片/记录", "已上传 3 份", "缺少签字页", "待补充"],
+  ];
+  const reviewProjects = [
+    ["维塘自控改造", "维智科技有限公司", "第22周", "待核对", "active"],
+    ["炼东泵站自动化升级", "智控自动化公司", "第22周", "待核对", ""],
+    ["河西污水厂扩容工程", "环控工程公司", "第22周", "待核对", ""],
+    ["南区加压泵站改造", "博运自控技术", "第21周", "已退回", "danger"],
+    ["北区水厂PLC升级", "领航自控科技", "第21周", "已通过", "done"],
+  ];
+  return `
+    <section class="specialty-workspace-page">
+      ${specialtyWorkspaceHeaderMarkup("进度核定", "区域和项目对专业化公司周度更新进行复核，确认工期、内容、偏差和大区介入需求。", [["待核定", "12项"], ["已退回", "4项"], ["需介入", "3项"]])}
+      <div class="specialty-review-layout">
+        <aside class="specialty-work-card">
+          <div class="specialty-section-title"><i></i><h3>待核对更新列表</h3></div>
+          <div class="specialty-review-tabs"><button class="active" type="button" data-specialty-action="筛选全部核定任务">全部 18</button><button type="button" data-specialty-action="筛选待核对任务">待核对 12</button><button type="button" data-specialty-action="筛选已退回任务">已退回 4</button></div>
+          <div class="specialty-review-search"><input placeholder="搜索工程名称 / 提报单位 / 责任人" /><button type="button" data-specialty-action="筛选核定列表">筛选</button></div>
+          <div class="specialty-review-list">
+            ${reviewProjects.map(([name, company, week, status, cls]) => `<button class="${cls}" type="button" data-specialty-action="切换核定任务：${safeText(name)}"><strong>${safeText(name)}</strong><span>${safeText(company)} · ${safeText(week)}</span><em>${safeText(status)}</em></button>`).join("")}
+          </div>
+        </aside>
+        <section class="specialty-review-main">
+          <section class="specialty-work-card">
+            <div class="panel-head"><h3>维塘自控改造 · 第22周进度核定</h3><span class="badge info">待核对</span></div>
+            <div class="specialty-review-summary">
+              <article><span>计划进度</span><strong>65%</strong></article>
+              <article><span>上报进度</span><strong>62%</strong></article>
+              <article><span>偏差值</span><strong class="danger-text">-3%</strong></article>
+              <article><span>当前阶段</span><strong>设备安装</strong></article>
+            </div>
+            <div class="specialty-review-meta">
+              <span>工程名称：维塘自控改造</span><span>专业化公司：维智科技有限公司</span><span>所属区域：南区</span><span>填报人：张三</span>
+            </div>
+          </section>
+          <section class="specialty-work-card">
+            <div class="specialty-section-title"><i></i><h3>周度进度核定表</h3></div>
+            <div class="specialty-review-check-table">
+              <div><span>核定项</span><span>计划口径</span><span>上报内容</span><span>系统判断</span><span>核定结论</span><span>说明</span></div>
+              ${reviewRows.map(([item, plan, report, judge, result]) => `<div><strong>${safeText(item)}</strong><span>${safeText(plan)}</span><span>${safeText(report)}</span><span>${safeText(judge)}</span><select><option>${safeText(result)}</option><option>通过</option><option>退回修改</option><option>需大区介入</option></select><input placeholder="填写复核说明" /></div>`).join("")}
+            </div>
+          </section>
+          <section class="specialty-work-card">
+            <div class="specialty-section-title"><i></i><h3>核定意见</h3></div>
+            <div class="specialty-review-opinion-grid">
+              ${specialtyField("是否存在工期偏差", specialtySelect(["是", "否"]), true)}
+              ${specialtyField("是否需要补充材料", specialtySelect(["是", "否"]), true)}
+              ${specialtyField("是否需要大区介入", specialtySelect(["否", "是"]), true)}
+              ${specialtyField("下一复核节点", specialtyInput("2025-06-01"), true)}
+              ${specialtyField("偏差/疑问说明", specialtyTextarea("填写偏差原因、疑问点、需补充资料或需大区协调内容"), true)}
+              ${specialtyField("处理意见", specialtyTextarea("填写区域/项目复核意见、退回原因或通过说明"), true)}
+            </div>
+            <div class="specialty-work-actions inline"><button class="primary-btn" type="button" data-specialty-action="核对通过">核对通过</button><button class="ghost-btn danger" type="button" data-specialty-action="退回修改">退回修改</button><button class="text-btn" type="button" data-specialty-action="提请大区介入">提请大区介入</button></div>
+          </section>
+        </section>
+        <aside class="specialty-work-card">
+          <div class="specialty-section-title"><i></i><h3>核对检查项</h3></div>
+          <div class="specialty-check-list">
+            ${["进度数据完整性", "计划与实际匹配性", "关键节点完成情况", "任务内容真实性", "风险与问题说明", "附件资料完整性", "偏差原因合理性", "处理建议合理性"].map((item, index) => `<p><b>${index + 1}</b><span>${item}</span><em>${index < 4 ? "通过" : "待核对"}</em></p>`).join("")}
+          </div>
+          <div class="specialty-history-mini review-history"><strong>历史核对记录</strong><p>05-18 李四：通过</p><p>05-11 张三：通过</p><p>05-04 张三：退回修改</p></div>
+        </aside>
+      </div>
+    </section>
+  `;
+}
+
+function specialtyCoordinateItems() {
+  return [
+    { id: "coord-1", name: "SCADA接口待确认", source: "炼油区域改造", owner: "王五", status: "待协调", level: "一般", due: "05-27", detail: "现场SCADA与DCS系统接口点表需要确认，影响联调计划推进。", action: "组织自动化、仪表、信息部门确认点表及通讯协议，形成接口确认文件。" },
+    { id: "coord-2", name: "控制柜到货延迟", source: "制氯装置", owner: "李四", status: "紧急", level: "高", due: "05-28", detail: "控制柜到货延期，可能影响施工窗口。", action: "协调采购与供应商压缩到货周期，同时评估临时替代方案。" },
+    { id: "coord-3", name: "施工窗口冲突", source: "全厂公辅系统", owner: "张三", status: "处理中", level: "中", due: "05-29", detail: "现场施工窗口与生产检修窗口冲突。", action: "由大区协调项目、生产和施工单位重新排布窗口。" },
+    { id: "coord-4", name: "跨专业验收资料补充", source: "化学品库区", owner: "赵六", status: "待协调", level: "一般", due: "05-30", detail: "验收资料缺少跨专业签字确认。", action: "补齐验收资料、会议纪要和各专业确认意见。" },
+  ];
+}
+
+function specialtyCoordinateWorkspaceMarkup() {
+  const items = specialtyCoordinateItems();
+  return `
+    <section class="specialty-workspace-page">
+      ${specialtyWorkspaceHeaderMarkup("事项协调", "汇总需大区或跨专业协调的事项，跟踪责任分工、进展记录和关闭条件。", [["待协调", "8项"], ["处理中", "9项"], ["紧急", "4项"]])}
+      <div class="specialty-coordinate-layout">
+        <aside class="specialty-work-card">
+          <div class="specialty-section-title"><i></i><h3>待协调事项总览</h3></div>
+          <div class="specialty-coordinate-list">
+            ${items.map((item, index) => `<button class="${index === 0 ? "active" : ""}" type="button" data-specialty-coordinate-detail="${item.id}"><strong>${safeText(item.name)}</strong><span>${safeText(item.source)} · 截止 ${safeText(item.due)}</span><em class="${item.status === "紧急" ? "urgent" : item.status === "处理中" ? "warning" : "waiting"}">${safeText(item.status)}</em></button>`).join("")}
+          </div>
+        </aside>
+        <section class="specialty-work-card">
+          <div class="panel-head"><h3>协调事项详情</h3><div class="specialty-inline-actions"><button type="button" data-specialty-action="指派协调责任人">指派责任人</button><button type="button" data-specialty-action="更新协调进展">更新进展</button><button type="button" data-specialty-action="关闭协调事项">关闭事项</button></div></div>
+          <div class="specialty-coordinate-detail">
+            <h4>SCADA接口待确认</h4>
+            <div class="specialty-review-summary">
+              <article><span>来源工程</span><strong>炼油区域改造</strong></article>
+              <article><span>责任人</span><strong>王五</strong></article>
+              <article><span>当前状态</span><strong>待协调</strong></article>
+              <article><span>期望完成</span><strong>2025-05-27</strong></article>
+            </div>
+            <p><b>问题描述：</b>现场SCADA与DCS系统接口点表需要确认，影响联调计划推进。</p>
+            <p><b>协调内容：</b>确认接口点表变更内容、信号属性及通讯协议，明确责任归属与实施方案。</p>
+            <p><b>处理措施：</b>组织自动化、仪表、信息部门确认点表及通讯协议，形成接口确认文件。</p>
+          </div>
+          <div class="specialty-message-panel">
+            <strong>当前推进记录</strong>
+            <p>李明：已更新接口点表 V1.2，详见附件。</p>
+            <p>赵六：通讯协议切换为 Modbus TCP，链路测试待现场确认。</p>
+            <div><input placeholder="请输入推进记录，支持 @ 相关人员" /><button type="button" data-specialty-action="发送推进记录">发送</button></div>
+          </div>
+        </section>
+        <aside class="specialty-work-card">
+          <div class="specialty-section-title"><i></i><h3>协调统计</h3></div>
+          <div class="specialty-stat-mini"><article><span>待协调</span><strong>8</strong></article><article><span>处理中</span><strong>9</strong></article><article><span>超期</span><strong>3</strong></article><article><span>已关闭</span><strong>6</strong></article></div>
+          <div class="specialty-flow-vertical"><p><b>1</b><span>提交事项</span></p><p><b>2</b><span>指派责任</span></p><p><b>3</b><span>推进处理</span></p><p><b>4</b><span>关闭归档</span></p></div>
+        </aside>
+      </div>
+    </section>
+  `;
+}
+
+function specialtyArchiveWorkspaceMarkup() {
+  const docs = [
+    ["预算方案", "维塘自控改造预算方案V3", "V3.0", "张三", "已归档", "2025-05-26"],
+    ["施工方案", "PLC接线施工方案", "V2.1", "李四", "已归档", "2025-05-25"],
+    ["交付方案", "阶段验收交付清单", "V1.0", "王五", "已归档", "2025-05-24"],
+    ["施工方案", "施工组织设计方案", "V1.3", "赵六", "已归档", "2025-05-23"],
+    ["交付方案", "竣工资料汇编", "V2.0", "李四", "待归档", "2025-05-22"],
+  ];
+  return `
+    <section class="specialty-workspace-page">
+      ${specialtyWorkspaceHeaderMarkup("档案库", "沉淀预算方案、施工方案、交付方案和过程资料，方便后期查看、追溯和留底。", [["预算方案", "128份"], ["施工方案", "246份"], ["交付方案", "174份"]])}
+      <div class="specialty-archive-layout">
+        <aside class="specialty-work-card">
+          <div class="specialty-section-title"><i></i><h3>档案分类</h3></div>
+          <div class="specialty-folder-tree">
+            <button class="active" type="button">预算方案 <span>128</span></button>
+            <button type="button">预算测算表 <span>56</span></button>
+            <button type="button">审批版预算 <span>72</span></button>
+            <button type="button">施工方案 <span>246</span></button>
+            <button type="button">施工组织设计 <span>98</span></button>
+            <button type="button">施工记录 <span>148</span></button>
+            <button type="button">交付方案 <span>174</span></button>
+          </div>
+        </aside>
+        <section class="specialty-work-card">
+          <div class="panel-head"><h3>档案列表</h3><div class="specialty-inline-actions"><button type="button" data-specialty-action="上传档案资料">上传资料</button><button type="button" data-specialty-action="批量归档">批量归档</button></div></div>
+          <div class="specialty-archive-filter"><input placeholder="请输入文档名称、工程名称" /><select><option>全部工程</option><option>维塘自控改造</option></select><select><option>全部状态</option><option>已归档</option><option>待归档</option></select></div>
+          <div class="specialty-archive-table">
+            <div><span>分类</span><span>文档名称</span><span>版本</span><span>上传人</span><span>状态</span><span>上传时间</span><span>操作</span></div>
+            ${docs.map(([type, name, version, owner, status, time]) => `<div><span>${type}</span><strong>${name}</strong><span>${version}</span><span>${owner}</span><em class="${status === "已归档" ? "done" : "warning"}">${status}</em><span>${time}</span><span><button type="button" data-specialty-action="预览档案：${safeText(name)}">预览</button><button type="button" data-specialty-action="下载档案：${safeText(name)}">下载</button><button type="button" data-specialty-action="查看版本：${safeText(name)}">版本</button></span></div>`).join("")}
+          </div>
+        </section>
+        <aside class="specialty-work-card">
+          <div class="specialty-section-title"><i></i><h3>档案详情 / 预览</h3></div>
+          <div class="specialty-doc-preview"><strong>维塘自控改造预算方案V3</strong><div>PDF 预览区</div><p>工程名称：维塘自控改造<br/>分类：预算方案<br/>版本号：V3.0<br/>上传人：张三<br/>关联事项：预算核定、成本测算</p></div>
+          <div class="specialty-history-mini"><strong>版本历史</strong><p>V3.0 当前版本 · V2.1 查看 · V1.0 查看</p></div>
+        </aside>
+      </div>
+    </section>
+  `;
+}
+
+function specialtyWorkspaceMarkup(workspace = "submit") {
+  if (workspace === "submit") return specialtySubmitWorkspaceMarkup();
+  if (workspace === "update") return specialtyUpdateWorkspaceMarkup();
+  if (workspace === "review") return specialtyReviewWorkspaceMarkup();
+  if (workspace === "coordinate") return specialtyCoordinateWorkspaceMarkup();
+  if (workspace === "archive") return specialtyArchiveWorkspaceMarkup();
+  return specialtyInteractionMarkup();
+}
+
+function specialtyInteractionMarkup(filters = specialtyFilterState()) {
+  const tasks = specialtyFilteredTasks(filters);
+  const focusRows = tasks.filter((task) => task.status !== "已完成").slice(0, 5).map((task, index) => ({
+    title: ["完成维塘PLC接线核定", "跟进SCADA画面联调", "处理控制柜到货偏差", "提交阶段验收资料", "关闭费用协调单"][index] || task.name,
+    tag: `截止 05-${27 + index}`,
+    tone: "deadline",
+  }));
+  const coordinationRows = tasks.filter((task) => ["进行中", "预警", "逾期"].includes(task.status)).slice(0, 5).map((task, index) => ({
+    title: ["SCADA联调接口待确认", "控制柜到货延迟", "现场施工窗口冲突", "跨专业验收资料补充", "仪表点位复核异常"][index] || task.name,
+    tag: task.status === "逾期" ? "紧急" : task.status === "预警" ? "处理中" : "待协调",
+    tone: task.status === "逾期" ? "urgent" : task.status === "预警" ? "warning" : "waiting",
+    owner: task.owner,
+  }));
+  return `
+    <section class="specialty-interaction-layout">
+      <div class="specialty-interaction-main">
+        <section class="specialty-workbench-card">
+          <div class="specialty-section-title"><i></i><h3>任务交互工作台</h3></div>
+          <div class="specialty-action-grid">
+            ${specialtyInteractionCards(tasks).map(([workspace, title, unit, value, matters]) => `
+              <button type="button" data-specialty-workspace="${workspace}">
+                <strong>${safeText(title)}</strong>
+                <ul>
+                  ${matters.map((matter) => `<li>${safeText(matter)}</li>`).join("")}
+                </ul>
+                <small>${safeText(unit)} <b>${value}</b> 项</small>
+              </button>
+            `).join("")}
+          </div>
+          <div class="specialty-stat-strip">
+            ${specialtyInteractionStats(tasks).map(([label, value, unit]) => `
+              <article>
+                <span>${safeText(label)}</span>
+                <strong>${value}<small>${safeText(unit)}</small></strong>
+              </article>
+            `).join("")}
+          </div>
+        </section>
+        ${specialtyInteractionWorkflowMarkup()}
+        ${specialtyInteractionTableMarkup(tasks)}
+      </div>
+      <aside class="specialty-interaction-side">
+        ${specialtySideListMarkup("本周重点事项", "⚑", focusRows)}
+        ${specialtySideListMarkup("待协调事项", "⚐", coordinationRows)}
+      </aside>
+    </section>
+  `;
+}
+
+function specialtyViewMarkup(view = "summary", filters = specialtyFilterState()) {
+  return view === "interaction" ? specialtyInteractionMarkup(filters) : specialtyContentMarkup(filters);
+}
+
+function updateSpecialtyContent(view = $("#specialtyContent")?.dataset.specialtyView || "summary") {
   const content = $("#specialtyContent");
   if (!content) return;
-  content.innerHTML = specialtyContentMarkup(specialtyFilterState());
+  content.dataset.specialtyView = view;
+  content.innerHTML = specialtyViewMarkup(view, specialtyFilterState());
+  $$(".specialty-hero-switch button").forEach((button) => {
+    button.classList.toggle("active", button.dataset.specialtyView === view);
+  });
+  bindSpecialtyLocalActions(content);
+}
+
+function renderSpecialtyWorkspace(workspace) {
+  const content = $("#specialtyContent");
+  if (!content) return;
+  content.dataset.specialtyView = "interaction";
+  content.dataset.currentSpecialtyWorkspace = workspace;
+  content.innerHTML = specialtyWorkspaceMarkup(workspace);
+  $$(".specialty-hero-switch button").forEach((button) => {
+    button.classList.toggle("active", button.dataset.specialtyView === "interaction");
+  });
+  bindSpecialtyLocalActions(content);
+  content.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function showSpecialtyToast(message) {
+  $("#specialtyToast")?.remove();
+  document.body.insertAdjacentHTML("beforeend", `<div class="specialty-toast" id="specialtyToast">${safeText(message)}</div>`);
+  setTimeout(() => $("#specialtyToast")?.classList.add("show"), 20);
+  setTimeout(() => $("#specialtyToast")?.remove(), 1800);
+}
+
+function bindSpecialtyLocalActions(root = $("#specialtyContent")) {
+  if (!root) return;
+  root.onclick = (event) => {
+    event.stopPropagation();
+  };
+  root.querySelectorAll("[data-specialty-workspace]").forEach((button) => {
+    button.onclick = (event) => {
+      event.stopPropagation();
+      renderSpecialtyWorkspace(button.dataset.specialtyWorkspace);
+    };
+  });
+  root.querySelectorAll("[data-specialty-workspace-back]").forEach((button) => {
+    button.onclick = (event) => {
+      event.stopPropagation();
+      updateSpecialtyContent("interaction");
+    };
+  });
+  root.querySelectorAll("[data-specialty-coordinate-detail]").forEach((button) => {
+    button.onclick = (event) => {
+      event.stopPropagation();
+      renderSpecialtyCoordinateModal(button.dataset.specialtyCoordinateDetail);
+    };
+  });
+  root.querySelectorAll("[data-specialty-upload]").forEach((button) => {
+    button.onclick = (event) => {
+      event.stopPropagation();
+      button.classList.add("uploaded");
+      button.querySelector("small").textContent = "已选择示例文件，等待提交";
+      showSpecialtyToast(`${button.dataset.specialtyUpload}已加入待上传队列`);
+    };
+  });
+  root.querySelectorAll("[data-specialty-action]").forEach((button) => {
+    button.onclick = (event) => {
+      event.stopPropagation();
+      showSpecialtyToast(`${button.dataset.specialtyAction}已触发`);
+    };
+  });
+}
+
+function renderSpecialtyCoordinateModal(itemId) {
+  const item = specialtyCoordinateItems().find((entry) => entry.id === itemId) || specialtyCoordinateItems()[0];
+  $("#specialtyCoordinateModal")?.remove();
+  document.body.insertAdjacentHTML("beforeend", `
+    <div class="modal-backdrop" id="specialtyCoordinateModal">
+      <section class="task-detail-modal specialty-coordinate-modal">
+        <header>
+          <div>
+            <h2>${safeText(item.name)}</h2>
+            <p class="muted">${safeText(item.source)} · ${safeText(item.status)} · 截止 ${safeText(item.due)}</p>
+          </div>
+          <button class="icon-close" data-close-specialty-coordinate-modal type="button">×</button>
+        </header>
+        <div class="task-detail-grid">
+          <div><span>来源工程</span><b>${safeText(item.source)}</b></div>
+          <div><span>责任人</span><b>${safeText(item.owner)}</b></div>
+          <div><span>紧急程度</span><b>${safeText(item.level)}</b></div>
+          <div><span>期望完成</span><b>${safeText(item.due)}</b></div>
+        </div>
+        <div class="task-detail-sections">
+          <section><h3>需协调事项</h3><p>${safeText(item.detail)}</p></section>
+          <section><h3>建议处理动作</h3><p>${safeText(item.action)}</p></section>
+          <section><h3>关闭条件</h3><p>形成责任确认、过程记录、附件资料和最终关闭意见。</p></section>
+        </div>
+        <footer>
+          <button class="ghost-btn" data-close-specialty-coordinate-modal type="button">关闭</button>
+          <button class="primary-btn" data-close-specialty-coordinate-modal type="button">确认处理</button>
+        </footer>
+      </section>
+    </div>
+  `);
 }
 
 function renderSpecialtyModule(item) {
@@ -5186,12 +5800,12 @@ function renderSpecialtyModule(item) {
       </div>
 
       <section class="specialty-hero-switch">
-        <button class="active" type="button">
+        <button class="active" type="button" data-specialty-view="summary">
           <i>▥</i>
           <span><strong>业务汇总</strong><small>总览业务进展与任务执行情况</small></span>
           <b>›</b>
         </button>
-        <button type="button">
+        <button type="button" data-specialty-view="interaction">
           <i>☵</i>
           <span><strong>任务交互</strong><small>任务沟通与协同处理中心</small></span>
           <b>›</b>
@@ -5229,9 +5843,10 @@ function renderSpecialtyModule(item) {
         <button class="ghost-btn" type="button" data-specialty-reset>重置</button>
       </section>
 
-      <div id="specialtyContent">${specialtyContentMarkup({ year: "所有", region: "全部区域", project: "全部项目", status: "全部状态", owner: "全部责任人", type: "全部" })}</div>
+      <div id="specialtyContent" data-specialty-view="summary">${specialtyContentMarkup({ year: "所有", region: "全部区域", project: "全部项目", status: "全部状态", owner: "全部责任人", type: "全部" })}</div>
     </div>
   `;
+  bindSpecialtyLocalActions($("#specialtyContent"));
 }
 
 function renderIntensiveModule(item) {
@@ -5796,6 +6411,11 @@ function bindEvents() {
     const projectMonthButton = event.target.closest("[data-project-month][data-project-id]");
     const specialtySearch = event.target.closest("[data-specialty-search]");
     const specialtyReset = event.target.closest("[data-specialty-reset]");
+    const specialtyView = event.target.closest("[data-specialty-view]");
+    const specialtyWorkspace = event.target.closest("[data-specialty-workspace]");
+    const specialtyWorkspaceBack = event.target.closest("[data-specialty-workspace-back]");
+    const specialtyCoordinateDetail = event.target.closest("[data-specialty-coordinate-detail]");
+    const closeSpecialtyCoordinateModal = event.target.closest("[data-close-specialty-coordinate-modal]");
     const specialtyTaskDetail = event.target.closest("[data-specialty-task-detail]");
     const specialtyProjectBack = event.target.closest("[data-specialty-project-back]");
     const specialtyProjectMonth = event.target.closest("[data-specialty-project-month][data-specialty-task-id]");
@@ -6056,16 +6676,36 @@ function bindEvents() {
       updateProjectMonth(projectMonthButton.dataset.projectId, projectMonthButton.dataset.projectMonth);
       return;
     }
+    if (specialtyView) {
+      updateSpecialtyContent(specialtyView.dataset.specialtyView);
+      return;
+    }
+    if (specialtyWorkspace) {
+      renderSpecialtyWorkspace(specialtyWorkspace.dataset.specialtyWorkspace);
+      return;
+    }
+    if (specialtyWorkspaceBack) {
+      updateSpecialtyContent("interaction");
+      return;
+    }
+    if (specialtyCoordinateDetail) {
+      renderSpecialtyCoordinateModal(specialtyCoordinateDetail.dataset.specialtyCoordinateDetail);
+      return;
+    }
+    if (closeSpecialtyCoordinateModal || event.target.id === "specialtyCoordinateModal") {
+      $("#specialtyCoordinateModal")?.remove();
+      return;
+    }
     if (specialtyTaskDetail) {
       renderSpecialtyProjectGantt(specialtyTaskDetail.dataset.specialtyTaskDetail);
       return;
     }
     if (specialtyProjectBack) {
-      updateSpecialtyContent();
+      updateSpecialtyContent("summary");
       return;
     }
     if (specialtyProjectMonth) {
-      renderSpecialtyProjectGantt(specialtyProjectMonth.dataset.specialtyTaskId, specialtyProjectMonth.dataset.specialtyProjectMonth);
+      renderSpecialtyProjectGantt(specialtyProjectMonth.dataset.specialtyTaskId, specialtyProjectMonth.dataset.specialtyProjectMonth, { scrollToMonth: true });
       return;
     }
     if (specialtySearch) {
