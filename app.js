@@ -4935,6 +4935,40 @@ function specialtyProjectMonthStatus(task, month) {
   return task.status;
 }
 
+function specialtyProjectMonthProgress(task, month) {
+  if (month < task.start || month > task.end) return 0;
+  const span = Math.max(1, task.end - task.start + 1);
+  const monthIndex = Math.max(1, month - task.start + 1);
+  if (task.status === "已完成") return 100;
+  if (task.status === "未开始") return 0;
+  return Math.min(100, Math.max(18, Math.round((task.progress / span) * monthIndex)));
+}
+
+function specialtyProjectRiskText(task) {
+  if (task.status === "逾期") return `逾期${task.overdueDays || 3}天`;
+  if (task.status === "预警") return `预警${task.warningDays || 5}天`;
+  if (task.status === "未开始") return "待启动";
+  if (task.status === "已完成") return "已闭环";
+  return "正常跟踪";
+}
+
+function specialtyProjectMonthCards(task, selectedMonth) {
+  return Array.from({ length: 12 }, (_, index) => {
+    const itemMonth = index + 1;
+    const status = specialtyProjectMonthStatus(task, itemMonth);
+    const progress = specialtyProjectMonthProgress(task, itemMonth);
+    const active = itemMonth === selectedMonth;
+    const disabled = status === "无任务";
+    return `
+      <button class="${active ? "active" : ""} ${specialtyStatusClass(status)}" type="button" data-specialty-project-month="${itemMonth}" data-specialty-task-id="${task.id}" aria-pressed="${active}">
+        <strong>${itemMonth}月</strong>
+        <span>${disabled ? "无任务" : status}</span>
+        ${disabled ? "" : `<em>${progress}%</em>`}
+      </button>
+    `;
+  }).join("");
+}
+
 function specialtyProjectGanttMarkup(taskId, selectedMonth = "") {
   const task = specialtyTasks.find((item) => item.id === taskId) || specialtyTasks[0];
   const month = Number(selectedMonth) || task.start;
@@ -4943,9 +4977,9 @@ function specialtyProjectGanttMarkup(taskId, selectedMonth = "") {
   const statusClass = specialtyStatusClass(task.status);
   return `
     <section class="specialty-project-detail">
-      <div class="specialty-project-top">
-        <button class="ghost-btn" type="button" data-specialty-project-back>← 返回业务汇总</button>
-        <div>
+      <div class="specialty-project-hero">
+        <button class="ghost-btn specialty-project-back" type="button" data-specialty-project-back>← 返回业务汇总</button>
+        <div class="specialty-project-title">
           <h3>${safeText(task.project)} · ${safeText(task.name)}</h3>
           <p>${safeText(task.region)} · ${safeText(task.type)} · ${task.year}</p>
         </div>
@@ -4955,25 +4989,18 @@ function specialtyProjectGanttMarkup(taskId, selectedMonth = "") {
         <article><span>责任人</span><strong>${safeText(task.owner)}</strong></article>
         <article><span>整体进度</span><strong>${task.progress}%</strong></article>
         <article><span>计划周期</span><strong>${task.start}月-${task.end}月</strong></article>
-        <article><span>风险提示</span><strong>${task.status === "逾期" ? `逾期${task.overdueDays || 3}天` : task.status === "预警" ? `预警${task.warningDays || 5}天` : "正常跟踪"}</strong></article>
+        <article><span>风险提示</span><strong>${safeText(specialtyProjectRiskText(task))}</strong></article>
       </div>
       <section class="specialty-year-overview">
         <div class="panel-head">
-          <h3>项目年度整体进度</h3>
-          <span>点击月份切换周维度任务甘特图</span>
+          <div>
+            <h3>项目年度整体进度</h3>
+            <span>点击月份切换周维度任务甘特图</span>
+          </div>
+          <p>${safeText(task.project)}年度关键节点追踪</p>
         </div>
         <div class="specialty-month-strip">
-          ${Array.from({ length: 12 }, (_, index) => {
-            const itemMonth = index + 1;
-            const status = specialtyProjectMonthStatus(task, itemMonth);
-            const active = itemMonth === month;
-            return `
-              <button class="${active ? "active" : ""} ${specialtyStatusClass(status)}" type="button" data-specialty-project-month="${itemMonth}" data-specialty-task-id="${task.id}">
-                <strong>${itemMonth}月</strong>
-                <span>${status}</span>
-              </button>
-            `;
-          }).join("")}
+          ${specialtyProjectMonthCards(task, month)}
         </div>
         <div class="specialty-project-gantt">
           <div class="specialty-project-gantt-row specialty-project-gantt-head">
@@ -4989,7 +5016,8 @@ function specialtyProjectGanttMarkup(taskId, selectedMonth = "") {
               ${Array.from({ length: 12 }, (_, index) => {
                 const itemMonth = index + 1;
                 const active = itemMonth >= item.start && itemMonth <= item.end;
-                return `<span>${active ? `<i class="${specialtyStatusClass(item.status)}">${item.progress}%</i>` : ""}</span>`;
+                const visibleProgress = active ? Math.min(100, Math.max(0, item.progress - Math.max(0, item.end - itemMonth) * 6)) : 0;
+                return `<span>${active ? `<i class="${specialtyStatusClass(item.status)}">${visibleProgress}%</i>` : ""}</span>`;
               }).join("")}
             </div>
           `).join("")}
@@ -4997,8 +5025,11 @@ function specialtyProjectGanttMarkup(taskId, selectedMonth = "") {
       </section>
       <section class="specialty-week-overview" id="specialtyMonthGantt">
         <div class="panel-head">
-          <h3>${month}月周维度甘特图</h3>
-          <span>按周跟踪任务、措施、负责人和完成节点</span>
+          <div>
+            <h3>${month}月周维度甘特图</h3>
+            <span>按周跟踪任务、措施、负责人和完成节点</span>
+          </div>
+          <p>${weeklyTasks.length ? `${weeklyTasks.length}项周任务` : "当前月暂无任务"}</p>
         </div>
         ${weeklyTasks.length ? `
           <div class="specialty-week-gantt">
@@ -5119,12 +5150,6 @@ function specialtyGanttMarkup(tasks, selectedType = "全部") {
           <h3>年度任务甘特图</h3>
           <span>按任务状态显示全年计划和推进情况</span>
         </div>
-        <label>
-          任务类型筛选
-          <select id="specialtyTypeSelect">
-            ${["全部", ...specialtyTaskTypes].map((type) => `<option value="${type}" ${type === selectedType ? "selected" : ""}>${type}</option>`).join("")}
-          </select>
-        </label>
       </div>
       <div class="specialty-gantt-legend">
         <span><i class="done"></i>已完成</span>
@@ -5232,8 +5257,10 @@ function specialtyLedgerRows(tasks) {
   return tasks.slice(0, 8).map((task, index) => {
     const risk = task.status === "逾期" ? "超期" : task.status === "预警" ? "预警" : "正常";
     return {
+      id: task.id,
       index: index + 1,
       name: task.name,
+      project: task.project,
       region: task.region.replace("区域公司", "区域"),
       phase: phases[index % phases.length],
       progress: task.progress,
@@ -5256,7 +5283,7 @@ function specialtyInteractionTableMarkup(tasks) {
         ${specialtyLedgerRows(tasks).map((row) => `
           <div class="specialty-ledger-row">
             <span>${row.index}</span>
-            <strong>${safeText(row.name)}</strong>
+            <strong><b>${safeText(row.project)}</b><small>${safeText(row.name)}</small></strong>
             <span>${safeText(row.region)}</span>
             <span>${safeText(row.phase)}</span>
             <span><i class="ledger-progress"><em style="width:${row.progress}%"></em></i><b>${row.progress}%</b></span>
@@ -5264,12 +5291,95 @@ function specialtyInteractionTableMarkup(tasks) {
             <span><em class="specialty-status ${row.risk === "超期" ? "overdue" : row.risk === "预警" ? "warning" : "done"}">${row.risk}</em></span>
             <span><em class="archive-pill">${safeText(row.archive)}</em></span>
             <span>${safeText(row.owner)}</span>
-            <span class="ledger-actions"><button type="button">查看</button><button type="button">更新</button><button type="button">归档</button></span>
+            <span class="ledger-actions"><button type="button" data-specialty-ledger-detail="${safeText(row.id)}">查看</button></span>
           </div>
         `).join("")}
       </div>
     </section>
   `;
+}
+
+function specialtyLedgerDetailTasks(task) {
+  const subtasks = specialtyProjectSubtasks(task);
+  const month = Math.min(task.end, Math.max(task.start, 5));
+  const weekly = specialtyMonthWeeklyTasks(task, month);
+  return subtasks.map((item, index) => ({
+    ...item,
+    week: weekly[index % Math.max(weekly.length, 1)]?.week || `第${index + 1}周`,
+    evidence: ["预算方案", "施工记录", "现场照片", "验收资料", "归档清单"][index],
+    issue: item.status === "逾期" ? "节点滞后，需补充偏差说明" : item.status === "预警" ? "存在资源到位风险" : item.status === "未开始" ? "等待上游节点完成" : "按计划推进",
+  }));
+}
+
+function renderSpecialtyLedgerDetailModal(taskId) {
+  const task = specialtyTasks.find((entry) => entry.id === taskId) || specialtyTasks[0];
+  const details = specialtyLedgerDetailTasks(task);
+  const doneCount = details.filter((item) => item.status === "已完成").length;
+  const riskyCount = details.filter((item) => ["逾期", "预警"].includes(item.status)).length;
+  $("#specialtyLedgerDetailModal")?.remove();
+  document.body.insertAdjacentHTML("beforeend", `
+    <div class="modal-backdrop" id="specialtyLedgerDetailModal">
+      <section class="task-detail-modal specialty-ledger-modal">
+        <header>
+          <div>
+            <h2>${safeText(task.project)} · ${safeText(task.name)}</h2>
+            <p class="muted">${safeText(task.region)} · ${safeText(task.type)} · ${task.year} · 计划 ${task.start}月-${task.end}月</p>
+          </div>
+          <button class="icon-close" data-close-specialty-ledger-modal type="button">×</button>
+        </header>
+        <div class="specialty-ledger-detail-kpis">
+          <article><span>总进度</span><strong>${task.progress}%</strong></article>
+          <article><span>责任人</span><strong>${safeText(task.owner)}</strong></article>
+          <article><span>已完成子任务</span><strong>${doneCount}/${details.length}</strong></article>
+          <article><span>风险事项</span><strong>${riskyCount}</strong></article>
+        </div>
+        <section class="specialty-ledger-detail-section">
+          <div class="panel-head">
+            <h3>子任务状态总览</h3>
+            <span>按方案、资源、实施、复核和归档拆解</span>
+          </div>
+          <div class="specialty-subtask-cards">
+            ${details.map((item, index) => `
+              <article class="${specialtyStatusClass(item.status)}">
+                <b>${index + 1}</b>
+                <strong>${safeText(item.name)}</strong>
+                <span>${safeText(item.measure)}</span>
+                <em class="specialty-status ${specialtyStatusClass(item.status)}">${safeText(item.status)}</em>
+              </article>
+            `).join("")}
+          </div>
+        </section>
+        <section class="specialty-ledger-detail-section">
+          <div class="panel-head">
+            <h3>任务明细</h3>
+            <span>查看节点、责任、问题和资料沉淀情况</span>
+          </div>
+          <div class="specialty-subtask-detail-table">
+            <div><span>子任务</span><span>计划节点</span><span>负责人</span><span>当前状态</span><span>进度</span><span>问题/说明</span><span>资料</span></div>
+            ${details.map((item) => `
+              <div>
+                <strong>${safeText(item.name)}<small>${safeText(item.week)}</small></strong>
+                <span>${safeText(item.node)}</span>
+                <span>${safeText(item.owner)}</span>
+                <span><em class="specialty-status ${specialtyStatusClass(item.status)}">${safeText(item.status)}</em></span>
+                <span><i class="ledger-progress"><em style="width:${item.progress}%"></em></i><b>${item.progress}%</b></span>
+                <span>${safeText(item.issue)}</span>
+                <span>${safeText(item.evidence)}</span>
+              </div>
+            `).join("")}
+          </div>
+        </section>
+        <section class="specialty-ledger-detail-section compact">
+          <h3>下一步建议</h3>
+          <p>${task.status === "逾期" ? "优先补齐滞后节点的原因说明，明确责任人和追赶计划，并同步大区核定。" : task.status === "预警" ? "建议提前发起资源协调，锁定关键材料、人员和施工窗口，避免转为逾期。" : "保持周度更新节奏，按节点沉淀过程资料并同步归档。"}</p>
+        </section>
+        <footer>
+          <button class="ghost-btn" data-close-specialty-ledger-modal type="button">关闭</button>
+          <button class="primary-btn" data-close-specialty-ledger-modal type="button">确认查看</button>
+        </footer>
+      </section>
+    </div>
+  `);
 }
 
 function specialtySideListMarkup(title, icon, rows) {
@@ -5314,7 +5424,8 @@ function specialtyField(label, control, required = false) {
 }
 
 function specialtyInput(placeholder = "", value = "") {
-  return `<input value="${safeText(value)}" placeholder="${safeText(placeholder)}" />`;
+  const hint = value || placeholder;
+  return `<input placeholder="${safeText(hint)}" />`;
 }
 
 function specialtySelect(options = []) {
@@ -5322,7 +5433,8 @@ function specialtySelect(options = []) {
 }
 
 function specialtyTextarea(placeholder = "", value = "") {
-  return `<textarea placeholder="${safeText(placeholder)}">${safeText(value)}</textarea>`;
+  const hint = value || placeholder;
+  return `<textarea placeholder="${safeText(hint)}"></textarea>`;
 }
 
 function specialtyUploadBox(title, desc) {
@@ -5447,7 +5559,7 @@ function specialtyUpdateWorkspaceMarkup() {
         <div class="panel-head"><h3>本周任务与甘特图更新</h3><span class="muted">按原定周任务逐项更新</span></div>
         <div class="specialty-week-update-table">
           <div><span>任务名称</span><span>进度</span><span>状态</span><span>施工日期</span><span>负责人</span><span>操作</span></div>
-          ${tasks.map(([name, rate, status, date, owner]) => `<div><span>${name}</span><strong>${rate}</strong><em class="${status === "滞后" ? "overdue" : status === "预警" ? "warning" : "done"}">${status}</em><span>${date}</span><span>${owner}</span><button type="button" data-specialty-action="更新周任务：${safeText(name)}">更新</button></div>`).join("")}
+          ${tasks.map(([name, rate, status, date, owner]) => `<div><span>${name}</span><strong>${rate}</strong><em class="${status === "滞后" ? "overdue" : status === "预警" ? "warning" : "done"}">${status}</em><span>${date}</span><span>${owner}</span><button type="button" data-specialty-action="修改周任务：${safeText(name)}">修改</button></div>`).join("")}
         </div>
       </section>
       <div class="specialty-work-actions"><button class="ghost-btn" type="button" data-specialty-action="暂存进度更新">暂存</button><button class="primary-btn" type="button" data-specialty-action="提交进度更新">提交更新</button><button class="text-btn" type="button" data-specialty-action="发起资源协调">发起协调</button></div>
@@ -5737,6 +5849,12 @@ function bindSpecialtyLocalActions(root = $("#specialtyContent")) {
       renderSpecialtyCoordinateModal(button.dataset.specialtyCoordinateDetail);
     };
   });
+  root.querySelectorAll("[data-specialty-ledger-detail]").forEach((button) => {
+    button.onclick = (event) => {
+      event.stopPropagation();
+      renderSpecialtyLedgerDetailModal(button.dataset.specialtyLedgerDetail);
+    };
+  });
   root.querySelectorAll("[data-specialty-upload]").forEach((button) => {
     button.onclick = (event) => {
       event.stopPropagation();
@@ -5837,6 +5955,12 @@ function renderSpecialtyModule(item) {
           <select id="specialtyOwnerSelect">
             <option>全部责任人</option>
             ${specialtyOwners.map((owner) => `<option>${owner}</option>`).join("")}
+          </select>
+        </label>
+        <label>任务类型
+          <select id="specialtyTypeSelect">
+            <option value="全部">全部</option>
+            ${specialtyTaskTypes.map((type) => `<option value="${type}">${type}</option>`).join("")}
           </select>
         </label>
         <button class="primary-btn" type="button" data-specialty-search>查询</button>
@@ -6358,6 +6482,25 @@ function showFloatingTaskTooltip(text, event) {
 
 function bindEvents() {
   document.body.addEventListener("click", (event) => {
+    const specialtyTaskDetail = event.target.closest("[data-specialty-task-detail]");
+    const specialtyProjectBack = event.target.closest("[data-specialty-project-back]");
+    const specialtyProjectMonth = event.target.closest("[data-specialty-project-month][data-specialty-task-id]");
+    if (!specialtyTaskDetail && !specialtyProjectBack && !specialtyProjectMonth) return;
+    event.preventDefault();
+    event.stopPropagation();
+    hideFloatingTaskTooltip();
+    if (specialtyTaskDetail) {
+      renderSpecialtyProjectGantt(specialtyTaskDetail.dataset.specialtyTaskDetail);
+      return;
+    }
+    if (specialtyProjectBack) {
+      updateSpecialtyContent("summary");
+      return;
+    }
+    renderSpecialtyProjectGantt(specialtyProjectMonth.dataset.specialtyTaskId, specialtyProjectMonth.dataset.specialtyProjectMonth, { scrollToMonth: true });
+  }, true);
+
+  document.body.addEventListener("click", (event) => {
     const assistantEntry = event.target.closest("#assistantEntry");
     const closeAgent = event.target.closest("[data-close-agent]");
     const agentQuestion = event.target.closest("[data-agent-question]");
@@ -6416,6 +6559,7 @@ function bindEvents() {
     const specialtyWorkspaceBack = event.target.closest("[data-specialty-workspace-back]");
     const specialtyCoordinateDetail = event.target.closest("[data-specialty-coordinate-detail]");
     const closeSpecialtyCoordinateModal = event.target.closest("[data-close-specialty-coordinate-modal]");
+    const closeSpecialtyLedgerModal = event.target.closest("[data-close-specialty-ledger-modal]");
     const specialtyTaskDetail = event.target.closest("[data-specialty-task-detail]");
     const specialtyProjectBack = event.target.closest("[data-specialty-project-back]");
     const specialtyProjectMonth = event.target.closest("[data-specialty-project-month][data-specialty-task-id]");
@@ -6694,6 +6838,10 @@ function bindEvents() {
     }
     if (closeSpecialtyCoordinateModal || event.target.id === "specialtyCoordinateModal") {
       $("#specialtyCoordinateModal")?.remove();
+      return;
+    }
+    if (closeSpecialtyLedgerModal || event.target.id === "specialtyLedgerDetailModal") {
+      $("#specialtyLedgerDetailModal")?.remove();
       return;
     }
     if (specialtyTaskDetail) {
