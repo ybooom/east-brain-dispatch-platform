@@ -271,7 +271,7 @@ const starAreaMetrics = [
     title: "量化星星总数",
     value: "406",
     unit: "颗",
-    cardNote: "5月 · 较4月 +132",
+    cardNote: "较4月 +132｜较25年12月份 +103｜距目标 54颗",
     note: "按星级量化规则测算",
     series: [
       ["2025年12月", 303],
@@ -290,7 +290,7 @@ const starAreaMetrics = [
     title: "量化+验收星星总数",
     value: "280",
     unit: "颗",
-    cardNote: "5月 · 较4月 +57",
+    cardNote: "较4月 +57｜较25年12月份 +28｜距目标 40颗",
     note: "已纳入验收结果",
     series: [
       ["2025年12月", 252],
@@ -309,7 +309,7 @@ const starAreaMetrics = [
     title: "量化+验收+回款星星总数",
     value: "238",
     unit: "颗",
-    cardNote: "5月 · 较4月 +46",
+    cardNote: "较4月 +46｜较25年12月份 +18｜距目标 47颗",
     note: "叠加25年回款率测算",
     series: [
       ["2025年12月", 220],
@@ -328,7 +328,7 @@ const starAreaMetrics = [
     title: "总分",
     value: "86.5",
     unit: "分",
-    cardNote: "综合评分",
+    cardNote: "较4月 +1.4｜较25年12月份 +4.5｜距目标 3.5分",
     note: "综合评分",
     series: [
       ["2025年12月", 82.0],
@@ -347,7 +347,7 @@ const starAreaMetrics = [
     title: "运行质量得分",
     value: "91",
     unit: "分",
-    cardNote: "运行稳定性",
+    cardNote: "较4月 +1｜较25年12月份 +5｜距目标 3分",
     note: "运行稳定性",
     series: [
       ["2025年12月", 86],
@@ -366,7 +366,7 @@ const starAreaMetrics = [
     title: "设备质量得分",
     value: "88",
     unit: "分",
-    cardNote: "设备完好率",
+    cardNote: "较4月 +1｜较25年12月份 +4｜距目标 4分",
     note: "设备完好率",
     series: [
       ["2025年12月", 84],
@@ -385,7 +385,7 @@ const starAreaMetrics = [
     title: "数据质量得分",
     value: "93",
     unit: "分",
-    cardNote: "数据完整准确",
+    cardNote: "较4月 +1｜较25年12月份 +5｜距目标 2分",
     note: "数据完整准确",
     series: [
       ["2025年12月", 88],
@@ -1774,6 +1774,177 @@ function renderStarMetricCards() {
       <small>${metric.cardNote || metric.note}</small>
     </article>
   `).join("");
+}
+
+const starAnnualGoalCards = [
+  { id: "quant", title: "量化星级目标", value: "460", unit: "颗" },
+  { id: "accept", title: "量化+验收星级目标", value: "320", unit: "颗" },
+  { id: "payback", title: "量化+验收+回款星级目标", value: "285", unit: "颗" },
+  { id: "total", title: "星级总分目标", value: "90", unit: "分" },
+  { id: "operation", title: "运行质量得分目标", value: "94", unit: "分" },
+  { id: "device", title: "设备质量得分目标", value: "92", unit: "分" },
+  { id: "data", title: "数据质量得分目标", value: "95", unit: "分" },
+];
+
+const starTargetColumns = [
+  { key: "accept", title: "验收星级", unit: "颗" },
+  { key: "quant", title: "量化星级", unit: "颗" },
+  { key: "acceptQuant", title: "验收+量化星级", unit: "颗" },
+  { key: "index", title: "星级指数", unit: "" },
+];
+
+const starTargetRows = [
+  { name: "大区合计", scope: "area", base: 124, current: { accept: 282, quant: 312, acceptQuant: 244 }, target2026: { accept: 318, quant: 363, acceptQuant: 311, index: 2.508 }, target2027: { accept: 333, quant: 393, acceptQuant: 329, index: 2.653 }, target2028: { accept: 378, quant: 421, acceptQuant: 373, index: 3.008 } },
+  { name: "济宁区域公司", scope: "region", base: 4, current: { accept: 11, quant: 8, acceptQuant: 8 }, target2026: { accept: 12, quant: 15, acceptQuant: 12, index: 3.000 }, target2027: { accept: 12, quant: 16, acceptQuant: 12, index: 3.000 }, target2028: { accept: 13, quant: 16, acceptQuant: 13, index: 3.250 } },
+  { name: "临沂区域公司", scope: "region", base: 6, current: { accept: 18, quant: 17, acceptQuant: 16 }, target2026: { accept: 18, quant: 19, acceptQuant: 18, index: 3.000 }, target2027: { accept: 18, quant: 22, acceptQuant: 18, index: 3.000 }, target2028: { accept: 19, quant: 23, acceptQuant: 19, index: 3.167 } },
+  { name: "枣庄区域公司", scope: "region", base: 5, current: { accept: 14, quant: 14, acceptQuant: 12 }, target2026: { accept: 15, quant: 17, acceptQuant: 15, index: 3.000 }, target2027: { accept: 15, quant: 18, acceptQuant: 15, index: 3.000 }, target2028: { accept: 16, quant: 18, acceptQuant: 16, index: 3.200 } },
+  { name: "郑州业务区", scope: "region", base: 5, current: { accept: 12, quant: 17, acceptQuant: 12 }, target2026: { accept: 13, quant: 16, acceptQuant: 13, index: 2.600 }, target2027: { accept: 13, quant: 17, acceptQuant: 13, index: 2.600 }, target2028: { accept: 17, quant: 18, acceptQuant: 17, index: 3.400 } },
+  { name: "洛阳区域公司", scope: "region", base: 6, current: { accept: 17, quant: 15, acceptQuant: 14 }, target2026: { accept: 15, quant: 15, acceptQuant: 15, index: 2.500 }, target2027: { accept: 16, quant: 17, acceptQuant: 16, index: 2.667 }, target2028: { accept: 19, quant: 19, acceptQuant: 19, index: 3.167 } },
+  { name: "青岛区域公司", scope: "region", base: 10, current: { accept: 23, quant: 27, acceptQuant: 21 }, target2026: { accept: 24, quant: 30, acceptQuant: 24, index: 2.400 }, target2027: { accept: 25, quant: 27, acceptQuant: 22, index: 2.200 }, target2028: { accept: 28, quant: 27, acceptQuant: 24, index: 2.400 } },
+  { name: "烟威区域公司", scope: "region", base: 4, current: { accept: 12, quant: 10, acceptQuant: 9 }, target2026: { accept: 12, quant: 11, acceptQuant: 10, index: 2.500 }, target2027: { accept: 12, quant: 13, acceptQuant: 12, index: 3.000 }, target2028: { accept: 13, quant: 14, acceptQuant: 13, index: 3.250 } },
+  { name: "台州区域公司", scope: "region", base: 4, current: { accept: 11, quant: 7, acceptQuant: 7 }, target2026: { accept: 11, quant: 12, acceptQuant: 10, index: 2.500 }, target2027: { accept: 11, quant: 13, acceptQuant: 10, index: 2.500 }, target2028: { accept: 13, quant: 14, acceptQuant: 13, index: 3.250 } },
+  { name: "北京望工环境", scope: "region", base: 21, current: { accept: 50, quant: 58, acceptQuant: 47 }, target2026: { accept: 58, quant: 65, acceptQuant: 57, index: 2.714 }, target2027: { accept: 61, quant: 67, acceptQuant: 61, index: 2.905 }, target2028: { accept: 67, quant: 70, acceptQuant: 67, index: 3.190 } },
+  { name: "菏泽区域公司", scope: "region", base: 6, current: { accept: 12, quant: 17, acceptQuant: 12 }, target2026: { accept: 15, quant: 18, acceptQuant: 15, index: 2.500 }, target2027: { accept: 17, quant: 18, acceptQuant: 17, index: 2.833 }, target2028: { accept: 19, quant: 19, acceptQuant: 19, index: 3.167 } },
+  { name: "东营滨州区域公司", scope: "region", base: 6, current: { accept: 14, quant: 11, acceptQuant: 11 }, target2026: { accept: 16, quant: 15, acceptQuant: 15, index: 2.500 }, target2027: { accept: 16, quant: 17, acceptQuant: 16, index: 2.667 }, target2028: { accept: 18, quant: 21, acceptQuant: 18, index: 3.000 } },
+  { name: "苏皖业务区", scope: "region", base: 14, current: { accept: 27, quant: 38, acceptQuant: 23 }, target2026: { accept: 38, quant: 46, acceptQuant: 38, index: 2.714 }, target2027: { accept: 41, quant: 50, acceptQuant: 41, index: 2.929 }, target2028: { accept: 42, quant: 53, acceptQuant: 42, index: 3.000 } },
+  { name: "杭州区域公司", scope: "region", base: 4, current: { accept: 9, quant: 12, acceptQuant: 9 }, target2026: { accept: 11, quant: 13, acceptQuant: 11, index: 2.750 }, target2027: { accept: 11, quant: 13, acceptQuant: 11, index: 2.750 }, target2028: { accept: 13, quant: 14, acceptQuant: 12, index: 3.000 } },
+  { name: "潍坊区域公司", scope: "region", base: 3, current: { accept: 7, quant: 6, acceptQuant: 6 }, target2026: { accept: 7, quant: 8, acceptQuant: 7, index: 2.333 }, target2027: { accept: 7, quant: 9, acceptQuant: 7, index: 2.333 }, target2028: { accept: 9, quant: 11, acceptQuant: 9, index: 3.000 } },
+  { name: "西安区域公司", scope: "region", base: 6, current: { accept: 13, quant: 11, acceptQuant: 8 }, target2026: { accept: 13, quant: 14, acceptQuant: 12, index: 2.000 }, target2027: { accept: 14, quant: 18, acceptQuant: 14, index: 2.333 }, target2028: { accept: 18, quant: 20, acceptQuant: 18, index: 3.000 } },
+  { name: "南阳区域公司", scope: "region", base: 3, current: { accept: 4, quant: 4, acceptQuant: 4 }, target2026: { accept: 5, quant: 6, acceptQuant: 5, index: 1.667 }, target2027: { accept: 5, quant: 7, acceptQuant: 5, index: 1.667 }, target2028: { accept: 6, quant: 8, acceptQuant: 6, index: 2.000 } },
+  { name: "太原区域公司", scope: "region", base: 2, current: { accept: 1, quant: 0, acceptQuant: 0 }, target2026: { accept: 1, quant: 1, acceptQuant: 1, index: 0.500 }, target2027: { accept: 3, quant: 4, acceptQuant: 3, index: 1.500 }, target2028: { accept: 5, quant: 5, acceptQuant: 5, index: 2.500 } },
+  { name: "晋临区域公司", scope: "region", base: 4, current: { accept: 8, quant: 12, acceptQuant: 8 }, target2026: { accept: 11, quant: 12, acceptQuant: 11, index: 2.750 }, target2027: { accept: 11, quant: 12, acceptQuant: 11, index: 2.750 }, target2028: { accept: 12, quant: 13, acceptQuant: 12, index: 3.000 } },
+  { name: "济南区域公司", scope: "region", base: 6, current: { accept: 13, quant: 15, acceptQuant: 12 }, target2026: { accept: 15, quant: 16, acceptQuant: 14, index: 2.333 }, target2027: { accept: 15, quant: 19, acceptQuant: 15, index: 2.500 }, target2028: { accept: 18, quant: 21, acceptQuant: 18, index: 3.000 } },
+  { name: "聊城区域公司", scope: "region", base: 5, current: { accept: 6, quant: 13, acceptQuant: 5 }, target2026: { accept: 8, quant: 14, acceptQuant: 8, index: 1.600 }, target2027: { accept: 10, quant: 16, acceptQuant: 10, index: 2.000 }, target2028: { accept: 13, quant: 17, acceptQuant: 13, index: 2.600 } },
+];
+
+function starGoalCardMarkup(goal) {
+  return `
+    <button class="star-goal-card" data-star-annual-goal="${goal.id}" type="button">
+      <span>${goal.title}</span>
+      <strong>${goal.value}<em>${goal.unit}</em></strong>
+      <i>展开</i>
+    </button>
+  `;
+}
+
+function starMetricCardMarkup(metricId) {
+  const metric = starAreaMetrics.find((item) => item.id === metricId);
+  if (!metric) return "";
+  return `
+    <article class="metric-card metric-link" data-star-area-metric="${metric.id}" role="button" tabindex="0">
+      <span>${metric.title}</span>
+      <strong>${metric.value}</strong>
+      <small>${metric.cardNote || metric.note}</small>
+    </article>
+  `;
+}
+
+function starTargetValue(row, column, type) {
+  if (column.key === "index") {
+    if (type === "current") return Number(row.current.acceptQuant / row.base).toFixed(3);
+    return Number(row[`target${type}`].index).toFixed(3);
+  }
+  return type === "current" ? row.current[column.key] : row[`target${type}`][column.key];
+}
+
+function starTargetDimensionCard(row, column) {
+  return `
+    <article class="star-target-dimension-card">
+      <span>${column.title}</span>
+      <div><em>当月现状</em><strong>${starTargetValue(row, column, "current")}${column.unit}</strong></div>
+      <div><em>26年目标</em><strong>${starTargetValue(row, column, "2026")}${column.unit}</strong></div>
+      <div><em>27年目标</em><strong>${starTargetValue(row, column, "2027")}${column.unit}</strong></div>
+      <div><em>28年目标</em><strong>${starTargetValue(row, column, "2028")}${column.unit}</strong></div>
+    </article>
+  `;
+}
+
+function starTargetRegionRow(row) {
+  return `
+    <article class="star-target-region-card">
+      <header>
+        <strong>${row.name}</strong>
+        <span>${row.base} 座水厂</span>
+      </header>
+      <div class="star-target-region-values">
+        ${starTargetColumns.map((column) => `
+          <div>
+            <span>${column.title}</span>
+            <b>现状 ${starTargetValue(row, column, "current")}${column.unit}</b>
+            <small>26年 ${starTargetValue(row, column, "2026")}${column.unit}</small>
+            <small>27年 ${starTargetValue(row, column, "2027")}${column.unit}</small>
+            <small>28年 ${starTargetValue(row, column, "2028")}${column.unit}</small>
+          </div>
+        `).join("")}
+      </div>
+    </article>
+  `;
+}
+
+function starTargetBarMarkup() {
+  const areaRow = starTargetRows.find((row) => row.scope === "area") || starTargetRows[0];
+  const regionRows = starTargetRows.filter((row) => row.scope === "region");
+  return `
+    <section class="star-target-bar" aria-label="星级目标栏">
+      <div class="star-target-bar-head">
+        <div>
+          <span>STAR TARGET MATRIX</span>
+          <h3>目标栏</h3>
+          <p>按大区与区域公司展示当月现状，以及 2026、2027、2028 年目标。</p>
+        </div>
+        <div class="star-target-head-stat">
+          <span>大区水厂基数</span>
+          <strong>${areaRow.base}</strong>
+        </div>
+      </div>
+      <div class="star-target-area-grid">
+        ${starTargetColumns.map((column) => starTargetDimensionCard(areaRow, column)).join("")}
+      </div>
+      <div class="star-target-region-section">
+        <div class="star-target-section-title">
+          <span>区域目标分解</span>
+          <small>${regionRows.length} 个区域公司</small>
+        </div>
+        <div class="star-target-region-grid">
+          ${regionRows.map(starTargetRegionRow).join("")}
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function starTaskDispatchEmbedMarkup() {
+  return `
+    <section class="star-task-dispatch-page">
+      <iframe class="star-task-dispatch-frame" src="./star-task-dispatch.html?v=20260708-lineage-project-catalog" title="数字化星级调度任务血缘关系索引"></iframe>
+    </section>
+  `;
+}
+
+function starDashboardHeroMarkup() {
+  return `
+    <section class="star-dashboard-hero">
+      <div>
+        <span>STAR OPS DASHBOARD</span>
+        <h3>星级业务驾驶舱</h3>
+        <p class="star-dashboard-target">东部大区十五五末数字化星级目标星级指数达到3.0</p>
+      </div>
+    </section>
+  `;
+}
+
+function starDashboardViewMarkup() {
+  return `
+    <section class="star-dashboard-page">
+      <section class="star-dashboard-nav-cards" aria-label="星级业务页面导航">
+        <button data-star-dashboard-jump="area" type="button"><span>大区整体情况</span><strong>区域通报 / 项目通报</strong></button>
+        <button data-star-dashboard-jump="region" type="button"><span>区域整体情况</span><strong>区域指标穿透分析</strong></button>
+        <button data-star-dashboard-jump="project" type="button"><span>项目整体情况</span><strong>项目指标穿透分析</strong></button>
+        <button data-star-dashboard-jump="gantt" type="button"><span>年度任务</span><strong>年度任务甘特与提报</strong></button>
+      </section>
+      ${starTargetBarMarkup()}
+    </section>
+  `;
 }
 
 function starMetricAnalysisMarkup(metricId) {
@@ -3313,11 +3484,16 @@ function renderStarInsight(view) {
   $(".star-metrics")?.classList.toggle("hide-on-region-view", view === "region");
   $(".star-metrics")?.classList.toggle("hide-on-gantt-view", view === "gantt");
   $(".star-metrics")?.classList.toggle("hide-on-project-view", view === "project");
+  $(".star-metrics")?.classList.toggle("hide-on-lineage-view", view === "lineage");
+  $(".star-metrics")?.classList.toggle("hide-on-dashboard-view", view === "dashboard");
+  $("#starDashboardHeroSlot")?.classList.toggle("hidden", view !== "dashboard");
   $$(".star-view-btn").forEach((button) => button.classList.toggle("active", button.dataset.starView === view));
+  if (view === "dashboard") content.innerHTML = starDashboardViewMarkup();
   if (view === "area") content.innerHTML = starAreaViewMarkup();
   if (view === "region") content.innerHTML = regionViewMarkup();
   if (view === "project") content.innerHTML = projectOverviewMarkup();
   if (view === "gantt") content.innerHTML = starGanttPanelMarkup();
+  if (view === "lineage") content.innerHTML = starTaskDispatchEmbedMarkup();
 }
 
 const intensiveViews = [
@@ -5997,13 +6173,16 @@ function renderStarModule(item) {
         <button class="ghost-btn" data-view-jump="cockpit">← 返回驾驶舱</button>
         <h2>数字化星级调度</h2>
         <div class="star-view-switch">
-          <button class="star-view-btn active" data-star-view="area" type="button">大区整体情况</button>
+          <button class="star-view-btn active" data-star-view="dashboard" type="button">星级驾驶舱</button>
+          <button class="star-view-btn" data-star-view="area" type="button">大区整体情况</button>
           <button class="star-view-btn" data-star-view="region" type="button">区域整体情况</button>
           <button class="star-view-btn" data-star-view="project" type="button">项目整体情况</button>
           <button class="star-view-btn" data-star-view="gantt" type="button">年度任务</button>
+          <button class="star-view-btn" data-star-view="lineage" type="button">任务血缘关系索引</button>
         </div>
       </div>
-      <section class="star-metrics">
+      <div id="starDashboardHeroSlot">${starDashboardHeroMarkup()}</div>
+      <section class="star-metrics hide-on-dashboard-view">
         <div class="star-score-row">
           ${renderStarMetricCards()}
         </div>
@@ -6011,7 +6190,7 @@ function renderStarModule(item) {
           ${renderStarTaskStatusCards()}
         </div>
       </section>
-      <div id="starInsightContent">${starAreaViewMarkup()}</div>
+      <div id="starInsightContent">${starDashboardViewMarkup()}</div>
     </div>
   `;
 }
