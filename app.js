@@ -1941,6 +1941,7 @@ function starDashboardViewMarkup() {
         <button data-star-dashboard-jump="region" type="button"><span>区域整体情况</span><strong>区域指标穿透分析</strong></button>
         <button data-star-dashboard-jump="project" type="button"><span>项目整体情况</span><strong>项目指标穿透分析</strong></button>
         <button data-star-dashboard-jump="gantt" type="button"><span>年度任务</span><strong>年度任务甘特与提报</strong></button>
+        <button data-star-dashboard-jump="lineage" type="button"><span>任务血缘关系索引</span><strong>任务层级关系与责任穿透</strong></button>
       </section>
       ${starTargetBarMarkup()}
     </section>
@@ -6684,6 +6685,7 @@ function bindEvents() {
     const closeAgent = event.target.closest("[data-close-agent]");
     const agentQuestion = event.target.closest("[data-agent-question]");
     const starView = event.target.closest("[data-star-view]");
+    const starDashboardJump = event.target.closest("[data-star-dashboard-jump]");
     const starTaskMetric = event.target.closest("[data-star-task-metric]");
     const starTaskBoardEntry = event.target.closest("[data-star-task-board-entry]");
     const starTaskBoardView = event.target.closest("[data-star-task-board-view]");
@@ -6902,6 +6904,10 @@ function bindEvents() {
     }
     if (starView) {
       renderStarInsight(starView.dataset.starView);
+      return;
+    }
+    if (starDashboardJump) {
+      renderStarInsight(starDashboardJump.dataset.starDashboardJump);
       return;
     }
     if (intensiveView) {
