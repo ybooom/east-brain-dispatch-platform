@@ -33,6 +33,18 @@ const modules = [
     chart: [48, 56, 61, 66, 72, 79],
   },
   {
+    id: "task-pool",
+    icon: "▣",
+    name: "任务池",
+    summary: "承接项目端月度任务填报，形成专业化公司与大区运营部双工单池，并关联星级任务血缘索引。",
+    kpis: [["42", "池内任务"], ["18", "专业化工单"], ["24", "运营部工单"], ["100%", "血缘关联"]],
+    metrics: [["月度任务填报", "42", "覆盖 20 个区域"], ["专业化公司工单池", "18", "技术/采购/工程支撑"], ["大区运营部工单池", "24", "管理/设备/数据治理"], ["已关联血缘索引", "42", "自动映射任务主体"]],
+    plan: [["项目填报", "项目端按月度任务、基本任务、项目需求、需求分类和责任角色提交任务。"], ["双池分派", "东部智脑识别需求类别，归属专业化公司工单池或大区运营部工单池。"], ["血缘关联", "任务池明细自动映射到星级年度任务血缘关系索引，支撑任务追踪。"]],
+    tasks: [["泵站测点梳理与采集基线", "项目端", "进行中", 62, "中"], ["设备预算管理工单派发", "大区运营部", "进行中", 48, "高"], ["自控工程资源支持", "专业化公司", "已完成", 100, "低"], ["数据治理任务主体补录", "运营管理部", "预警", 35, "中"]],
+    insight: "任务池是项目端任务提报和血缘索引之间的入口层，统一字段、统一责任角色、统一归属工单池。",
+    chart: [12, 18, 24, 31, 37, 42],
+  },
+  {
     id: "intensive",
     icon: "▦",
     name: "集约化调度",
@@ -861,9 +873,11 @@ function safeText(value) {
 
 function renderNavigation() {
   const nav = $(".module-nav");
+  const primaryModules = modules.filter((item) => item.id !== "task-pool");
+  const utilityNavItems = [modules.find((item) => item.id === "task-pool"), ...utilityModules].filter(Boolean);
   nav.insertAdjacentHTML(
     "beforeend",
-    modules.map((item) => `
+    primaryModules.map((item) => `
       <button class="nav-item" data-module="${item.id}">
         <span class="nav-icon">${item.icon}</span>
         <span>${item.name}</span>
@@ -872,7 +886,7 @@ function renderNavigation() {
   );
   $("#utilityNav").innerHTML = `
     <div class="utility-title">平台能力</div>
-    ${utilityModules.map((item) => `
+    ${utilityNavItems.map((item) => `
       <button class="nav-item utility-item" data-module="${item.id}">
         <span class="nav-icon">${item.icon}</span>
         <span>${item.name}</span>
@@ -882,7 +896,7 @@ function renderNavigation() {
 }
 
 function renderCards() {
-  $("#moduleCards").innerHTML = modules.map((item) => `
+  $("#moduleCards").innerHTML = modules.filter((item) => item.id !== "task-pool").map((item) => `
     <article class="module-card cockpit-module-card cockpit-topic-card" data-module="${item.id}">
       <div class="module-card-head">
         <span class="module-icon">${item.icon}</span>
@@ -1766,8 +1780,11 @@ function starAreaViewMarkup() {
   return starAreaReportMarkup();
 }
 
-function renderStarMetricCards() {
-  return starAreaMetrics.map((metric) => `
+function renderStarMetricCards(metricIds = []) {
+  const metrics = metricIds.length
+    ? starAreaMetrics.filter((metric) => metricIds.includes(metric.id))
+    : starAreaMetrics;
+  return metrics.map((metric) => `
     <article class="metric-card metric-link" data-star-area-metric="${metric.id}" role="button" tabindex="0">
       <span>${metric.title}</span>
       <strong>${metric.value}</strong>
@@ -1791,6 +1808,27 @@ const starTargetColumns = [
   { key: "quant", title: "量化星级", unit: "颗" },
   { key: "acceptQuant", title: "验收+量化星级", unit: "颗" },
   { key: "index", title: "星级指数", unit: "" },
+];
+
+const starTargetScoreColumns = [
+  { key: "totalScore", scoreKey: "total", title: "星级量化总分", unit: "分", type: "score", precision: 1, regionalOffset: 0 },
+  { key: "operationScore", scoreKey: "operation", title: "运行质量得分", unit: "分", type: "score", precision: 1, regionalOffset: -2 },
+  { key: "deviceScore", scoreKey: "device", title: "设备质量得分", unit: "分", type: "score", precision: 1, regionalOffset: 4 },
+  { key: "dataScore", scoreKey: "data", title: "数据质量得分", unit: "分", type: "score", precision: 1, regionalOffset: 3 },
+];
+
+const starTargetFilterColumns = [...starTargetColumns, ...starTargetScoreColumns];
+const starTargetProjectRows = Array.isArray(window.starTargetProjectRows) ? window.starTargetProjectRows : [];
+let activeStarTargetDimension = "accept";
+let activeStarTargetScope = "region";
+let activeStarTargetProjectRegion = "全部区域";
+let activeStarTargetProject = "全部项目";
+
+const starScoreTargetCards = [
+  { title: "星级量化总分", current: 72, target2026: 75, target2027: 78, target2028: 81 },
+  { title: "运行质量得分", current: 71, target2026: 73, target2027: 75, target2028: 78 },
+  { title: "设备质量得分", current: 89, target2026: 91, target2027: 94, target2028: 96 },
+  { title: "数据质量得分", current: 88, target2026: 90, target2027: 92, target2028: 95 },
 ];
 
 const starTargetRows = [
@@ -1840,11 +1878,40 @@ function starMetricCardMarkup(metricId) {
 }
 
 function starTargetValue(row, column, type) {
+  if (column.type === "score") return starTargetScoreValue(row, column, type);
   if (column.key === "index") {
+    if (row.scope === "project") {
+      const values = type === "current" ? row.current : row[`target${type}`];
+      return Number((values.accept + values.quant + values.acceptQuant) / 3).toFixed(3);
+    }
     if (type === "current") return Number(row.current.acceptQuant / row.base).toFixed(3);
     return Number(row[`target${type}`].index).toFixed(3);
   }
   return type === "current" ? row.current[column.key] : row[`target${type}`][column.key];
+}
+
+function starTargetScoreValue(row, column, type) {
+  const increments = { current: 0, 2026: 2.6, 2027: 5.1, 2028: 7.8 };
+  let current;
+
+  if (row.scope === "project") {
+    const seed = Number(row.id.replace("project-", "")) || 1;
+    if (column.scoreKey === "total") current = row.scores.total;
+    if (column.scoreKey === "operation") current = row.scores.operation;
+    if (column.scoreKey === "device") current = row.scores.total * 0.46 + row.scores.operation * 0.43 + 8 + ((seed % 7) - 3) * 0.7;
+    if (column.scoreKey === "data") current = row.scores.total * 0.36 + row.scores.operation * 0.52 + 10 + ((seed % 5) - 2) * 0.8;
+  } else {
+    const currentIndex = Number(row.current.acceptQuant / row.base);
+    current = 69 + currentIndex * 5.5 + column.regionalOffset + (row.base % 3);
+  }
+
+  return Math.min(99, Math.max(0, current + increments[type]));
+}
+
+function starTargetDisplayValue(row, column, period) {
+  const value = starTargetValue(row, column, period);
+  const formatted = column.precision === undefined ? value : Number(value).toFixed(column.precision);
+  return `${formatted}${column.unit}`;
 }
 
 function starTargetDimensionCard(row, column) {
@@ -1859,31 +1926,123 @@ function starTargetDimensionCard(row, column) {
   `;
 }
 
-function starTargetRegionRow(row) {
+function starScoreTargetCardMarkup(card) {
   return `
-    <article class="star-target-region-card">
-      <header>
-        <strong>${row.name}</strong>
-        <span>${row.base} 座水厂</span>
-      </header>
-      <div class="star-target-region-values">
-        ${starTargetColumns.map((column) => `
-          <div>
-            <span>${column.title}</span>
-            <b>现状 ${starTargetValue(row, column, "current")}${column.unit}</b>
-            <small>26年 ${starTargetValue(row, column, "2026")}${column.unit}</small>
-            <small>27年 ${starTargetValue(row, column, "2027")}${column.unit}</small>
-            <small>28年 ${starTargetValue(row, column, "2028")}${column.unit}</small>
-          </div>
-        `).join("")}
-      </div>
+    <article class="star-target-dimension-card">
+      <span>${card.title}</span>
+      <div><em>26年当前实际</em><strong>${card.current}<i>分</i></strong></div>
+      <div><em>26年目标</em><strong>${card.target2026}<i>分</i></strong></div>
+      <div><em>27年目标</em><strong>${card.target2027}<i>分</i></strong></div>
+      <div><em>28年目标</em><strong>${card.target2028}<i>分</i></strong></div>
     </article>
   `;
 }
 
+function starTargetProjectRegions() {
+  return [...new Set(starTargetProjectRows.map((row) => row.region))].sort((a, b) => a.localeCompare(b, "zh-CN"));
+}
+
+function starTargetProjectOptions(region) {
+  return starTargetProjectRows
+    .filter((row) => region === "全部区域" || row.region === region)
+    .map((row) => row.project)
+    .sort((a, b) => a.localeCompare(b, "zh-CN"));
+}
+
+function starTargetProjectFilterRows() {
+  return starTargetProjectRows.filter((row) => {
+    const regionMatched = activeStarTargetProjectRegion === "全部区域" || row.region === activeStarTargetProjectRegion;
+    const projectMatched = activeStarTargetProject === "全部项目" || row.project === activeStarTargetProject;
+    return regionMatched && projectMatched;
+  });
+}
+
+function starTargetScopeSwitchMarkup() {
+  return `
+    <div class="star-target-scope-switch" role="tablist" aria-label="目标分解层级切换">
+      <button class="star-target-scope-btn ${activeStarTargetScope === "region" ? "active" : ""}" data-star-target-scope="region" type="button">区域层面</button>
+      <button class="star-target-scope-btn ${activeStarTargetScope === "project" ? "active" : ""}" data-star-target-scope="project" type="button">项目层面</button>
+    </div>
+  `;
+}
+
+function starTargetRegionMatrixMarkup() {
+  const column = starTargetFilterColumns.find((item) => item.key === activeStarTargetDimension) || starTargetFilterColumns[0];
+  const isProjectScope = activeStarTargetScope === "project";
+  const rows = isProjectScope ? starTargetProjectFilterRows() : starTargetRows.filter((row) => row.scope === "region");
+  const projectRegions = starTargetProjectRegions();
+  const projectOptions = starTargetProjectOptions(activeStarTargetProjectRegion);
+
+  return `
+    <div class="star-target-region-toolbar">
+      <div class="star-target-region-title">
+        <strong>${isProjectScope ? "项目目标分解" : "区域目标分解"}</strong>
+        <small>${isProjectScope ? `已筛选 ${rows.length} 个项目，项目星级数据来源于目标规划表。` : `覆盖 ${rows.length} 个区域公司，按单一指标查看阶段目标。`}</small>
+      </div>
+      ${starTargetScopeSwitchMarkup()}
+      <div class="star-target-controls">
+        ${isProjectScope ? `
+          <label class="star-target-filter">
+            <span>所属区域</span>
+            <select id="starTargetProjectRegionSelect" aria-label="项目层面所属区域筛选">
+              <option value="全部区域">全部区域</option>
+              ${projectRegions.map((region) => `<option value="${region}" ${region === activeStarTargetProjectRegion ? "selected" : ""}>${region}</option>`).join("")}
+            </select>
+          </label>
+          <label class="star-target-filter">
+            <span>项目公司</span>
+            <select id="starTargetProjectSelect" aria-label="项目层面项目筛选">
+              <option value="全部项目">全部项目</option>
+              ${projectOptions.map((project) => `<option value="${project}" ${project === activeStarTargetProject ? "selected" : ""}>${project}</option>`).join("")}
+            </select>
+          </label>
+        ` : ""}
+        <label class="star-target-filter">
+          <span>筛选维度</span>
+          <select id="starTargetDimensionSelect" aria-label="目标分解筛选维度">
+            ${starTargetFilterColumns.map((item) => `<option value="${item.key}" ${item.key === column.key ? "selected" : ""}>${item.title}</option>`).join("")}
+          </select>
+        </label>
+      </div>
+    </div>
+    <div class="star-target-region-table-wrap">
+      <table class="star-target-region-table ${isProjectScope ? "project-mode" : ""}">
+        <thead>
+          <tr>
+            <th>序号</th>
+            <th>区域公司</th>
+            <th>${isProjectScope ? "项目公司" : "水厂基数"}</th>
+            <th class="current-col">现状</th>
+            <th>2026 年目标</th>
+            <th>2027 年目标</th>
+            <th class="target-col">2028 年目标</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map((row, index) => `
+            <tr>
+              <td class="row-number">${String(index + 1).padStart(2, "0")}</td>
+              <td><strong>${isProjectScope ? row.region : row.name}</strong></td>
+              <td>${isProjectScope ? `<span class="star-target-project-name">${row.project}</span>` : `<span class="plant-count">${row.base} 座</span>`}</td>
+              <td class="current-col">${starTargetDisplayValue(row, column, "current")}</td>
+              <td>${starTargetDisplayValue(row, column, "2026")}</td>
+              <td>${starTargetDisplayValue(row, column, "2027")}</td>
+              <td class="target-col">${starTargetDisplayValue(row, column, "2028")}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function refreshStarTargetRegionMatrix() {
+  const targetRegionSection = $(".star-target-region-section");
+  if (targetRegionSection) targetRegionSection.innerHTML = starTargetRegionMatrixMarkup();
+}
+
 function starTargetBarMarkup() {
   const areaRow = starTargetRows.find((row) => row.scope === "area") || starTargetRows[0];
-  const regionRows = starTargetRows.filter((row) => row.scope === "region");
   return `
     <section class="star-target-bar" aria-label="星级目标栏">
       <div class="star-target-bar-head">
@@ -1900,14 +2059,14 @@ function starTargetBarMarkup() {
       <div class="star-target-area-grid">
         ${starTargetColumns.map((column) => starTargetDimensionCard(areaRow, column)).join("")}
       </div>
+      <section class="star-target-score-section" aria-label="质量与评分目标">
+        <div class="star-target-section-label">质量与评分目标</div>
+        <div class="star-target-area-grid star-target-score-grid">
+          ${starScoreTargetCards.map(starScoreTargetCardMarkup).join("")}
+        </div>
+      </section>
       <div class="star-target-region-section">
-        <div class="star-target-section-title">
-          <span>区域目标分解</span>
-          <small>${regionRows.length} 个区域公司</small>
-        </div>
-        <div class="star-target-region-grid">
-          ${regionRows.map(starTargetRegionRow).join("")}
-        </div>
+        ${starTargetRegionMatrixMarkup()}
       </div>
     </section>
   `;
@@ -2073,6 +2232,106 @@ function starTaskOwners() {
 
 function selectedAttr(value, selected) {
   return value === selected ? "selected" : "";
+}
+
+const taskPoolRows = [
+  { id: "tp-001", pool: "专业化公司工单池", area: "东部大区", region: "杭湖区域公司", project: "南浔经济开发区新城污水处理厂", monthTask: "1月度任务", baseTask: "泵站测点梳理与采集基线", demand: "补充自控采集点位，完成SCADA画面接入", category: "自控工程", level1: "设备管理", level2: "设备诊断管理", person: "吕玉想", position: "运营质量模块负责人", status: "进行中", progress: 62, lineage: "数据治理" },
+  { id: "tp-002", pool: "大区运营部工单池", area: "东部大区", region: "济宁区域公司", project: "曲阜市第二污水处理厂", monthTask: "1月度任务", baseTask: "设备预算与大修计划编制", demand: "协调大修重置资金预算与审批材料", category: "预算类", level1: "预算管理", level2: "设备预算管理", person: "张弛", position: "大区副总经理", status: "待派发", progress: 30, lineage: "大修重置" },
+  { id: "tp-003", pool: "专业化公司工单池", area: "东部大区", region: "青岛区域公司", project: "青岛高新区污水处理厂", monthTask: "2月度任务", baseTask: "工艺调试支持", demand: "协助优化加药曲线并形成调试记录", category: "工艺调试", level1: "方案管理", level2: "技改方案管理", person: "吕玉想", position: "运营质量模块负责人", status: "已完成", progress: 100, lineage: "工艺调整" },
+  { id: "tp-004", pool: "大区运营部工单池", area: "东部大区", region: "北京建工环境", project: "徐州龙亭污水处理厂", monthTask: "2月度任务", baseTask: "流程审批与采购协同", demand: "审批技改立项、采购等流程", category: "流程类", level1: "流程管理", level2: "流程审批管理", person: "张弛", position: "大区副总经理", status: "进行中", progress: 55, lineage: "管理提升" },
+  { id: "tp-005", pool: "专业化公司工单池", area: "东部大区", region: "苏皖业务区", project: "南京荣泰污水处理厂", monthTask: "3月度任务", baseTask: "产品采购支持", demand: "关键仪表产品选型与采购比价", category: "产品采购", level1: "方案管理", level2: "技改方案管理", person: "吕玉想", position: "运营质量模块负责人", status: "进行中", progress: 48, lineage: "设备改造" },
+  { id: "tp-006", pool: "大区运营部工单池", area: "东部大区", region: "东营滨州区域公司", project: "东营市东城北污水处理厂", monthTask: "3月度任务", baseTask: "数据质量专项补录", demand: "补齐运行、设备、验收数据台账", category: "数据类", level1: "数据管理", level2: "数据质量管理", person: "王敏", position: "数据专责", status: "预警", progress: 38, lineage: "数据治理" },
+];
+
+const taskPoolPoolTypes = { specialty: "专业化公司工单池", operation: "大区运营部工单池" };
+const taskPoolPersonPositionMap = { "吕玉想": "运营质量模块负责人", "张弛": "大区副总经理", "何胜杰": "运营提效模块负责人" };
+const taskPoolSpecialtyCategories = ["技改工程", "大修重置", "自控工程", "日常维护维修", "资产租赁", "药剂采购", "产品采购", "管网运维", "工艺调试"];
+const taskPoolRoleTree = {
+  "预算管理": ["运行预算管理", "设备预算管理", "技改预算管理"],
+  "方案管理": ["技改方案管理", "大修方案管理", "重置方案管理"],
+  "工艺管理": ["应急调控管理", "工艺优化管理"],
+  "设备管理": ["设备诊断管理", "设备调剂管理", "设备采购管理"],
+  "自控管理": ["自控方案管理", "施工进度管理", "自控功能管理"],
+  "流程管理": ["方案审批管理", "立项审批管理", "采购审批管理", "合同审批管理"],
+  "安全管理": ["危险作业管理", "现场安全管理"],
+  "风险管理": ["上游溢流管理", "进水冲击管理", "其他风险管理"],
+};
+
+function taskPoolOptions(options, selected = "") {
+  return options.map((item) => `<option ${selectedAttr(item, selected)}>${safeText(item)}</option>`).join("");
+}
+
+function taskPoolFillConfig(pool = taskPoolPoolTypes.specialty, level1 = "") {
+  const operation = pool === taskPoolPoolTypes.operation;
+  const level1Options = operation ? Object.keys(taskPoolRoleTree) : ["专业化公司服务目录"];
+  const selectedLevel1 = level1Options.includes(level1) ? level1 : level1Options[0];
+  return {
+    operation,
+    level1Options,
+    selectedLevel1,
+    level2Options: operation ? taskPoolRoleTree[selectedLevel1] : taskPoolSpecialtyCategories,
+    categoryOptions: operation ? ["工艺调整", "成本监审", "大修重置", "管理提升", "设备改造", "数据治理"] : taskPoolSpecialtyCategories,
+  };
+}
+
+function taskPoolFillMarkup(pool = taskPoolPoolTypes.specialty, level1 = "") {
+  const config = taskPoolFillConfig(pool, level1);
+  const poolName = config.operation ? taskPoolPoolTypes.operation : taskPoolPoolTypes.specialty;
+  return `
+    <section class="task-pool-fill-grid">
+      <section class="panel task-pool-form-panel">
+        <div class="panel-head"><h2>项目端填报月度任务</h2><span class="muted">提交后进入全部任务池并关联血缘索引</span></div>
+        <div class="task-pool-nature-switch">
+          <button class="${!config.operation ? "active" : ""}" data-task-pool-fill-nature="${taskPoolPoolTypes.specialty}" type="button"><span>专业化公司工单</span><small>按专业化公司服务目录派单</small><b>进入专业化公司填报端</b></button>
+          <button class="${config.operation ? "active" : ""}" data-task-pool-fill-nature="${taskPoolPoolTypes.operation}" type="button"><span>大区运营服务部工单</span><small>按大区一级、二级角色承接</small><b>进入大区运服部填报端</b></button>
+        </div>
+        <div class="task-pool-form">
+          <label><span>月度任务</span><select><option>1月度任务</option><option>2月度任务</option><option>3月度任务</option></select></label>
+          <label><span>基本任务</span><input value="泵站测点梳理与采集基线" /></label>
+          <label class="wide"><span>项目需求</span><textarea>补充自控采集点位，完成SCADA画面接入，并同步形成过程资料。</textarea></label>
+          <div class="task-pool-upload wide"><div><span>附件上传</span><small>支持上传方案、图片、台账、过程资料等附件</small></div><label class="task-pool-upload-btn"><input id="taskPoolAttachmentInput" type="file" multiple /><span>+ 选择附件</span></label><div class="task-pool-upload-list" id="taskPoolAttachmentList">暂未选择附件</div></div>
+          ${config.operation ? `
+            <label><span>大区一级角色</span><select id="taskPoolLevel1Select" data-task-pool-role-level1>${taskPoolOptions(config.level1Options, config.selectedLevel1)}</select></label>
+            <label><span>大区二级角色</span><select id="taskPoolLevel2Select">${taskPoolOptions(config.level2Options)}</select></label>` : `
+            <label><span>需求分类</span><select>${taskPoolOptions(config.categoryOptions)}</select></label>
+            <label><span>专业化服务目录</span><select id="taskPoolLevel1Select" data-task-pool-role-level1>${taskPoolOptions(config.level1Options, config.selectedLevel1)}</select></label>`}
+          <label><span>${config.operation ? "需求分类" : "服务细分类别"}</span><select id="taskPoolDemandCategorySelect">${taskPoolOptions(config.operation ? config.categoryOptions : config.level2Options)}</select></label>
+          <label><span>具体人员</span><select id="taskPoolPersonSelect">${taskPoolOptions(Object.keys(taskPoolPersonPositionMap))}</select></label>
+          <label><span>现岗位</span><input id="taskPoolPositionInput" value="${taskPoolPersonPositionMap["吕玉想"]}" readonly /></label>
+          <label><span>归属工单池</span><input value="${poolName}" readonly /></label>
+          <div class="task-pool-form-actions wide"><button type="button" class="ghost-btn">暂存草稿</button><button type="button" class="primary-btn" data-task-pool-submit>提交任务池</button></div>
+        </div>
+      </section>
+      <aside class="panel task-pool-route-panel"><div class="panel-head"><h2>自动关联逻辑</h2><span class="muted">东部智脑识别分派</span></div><div class="task-pool-flow">${["项目端填报", "需求类型识别", "归属双工单池", "派发责任人员", "关联任务血缘索引"].map((item, index) => `<div><b>0${index + 1}</b><span>${item}</span></div>`).join("")}</div><button class="task-pool-lineage-btn" data-task-pool-lineage type="button">查看任务血缘关系索引</button></aside>
+    </section>`;
+}
+
+function taskPoolBoardRow(row) {
+  return `<article class="task-pool-workorder" data-task-pool-detail="${row.id}" role="button" tabindex="0"><header><strong>${safeText(row.baseTask)}</strong><em>${row.status}</em></header><p>${safeText(row.demand)}</p><div class="task-pool-meta"><span>${row.region}</span><span>${row.project}</span><span>${row.category}</span><span>${row.level1} / ${row.level2}</span></div><div class="task-pool-owner"><span>${row.person}</span><small>${row.position}</small><button data-task-pool-detail="${row.id}" type="button">查看详情</button><button data-task-pool-lineage type="button">关联血缘</button></div><div class="small-progress"><i style="width:${row.progress}%"></i></div></article>`;
+}
+
+function taskPoolBoardMarkup(filters = null) {
+  const activeFilters = filters || { area: $("#taskPoolAreaSelect")?.value || "全部大区", region: $("#taskPoolRegionSelect")?.value || "全部区域", project: $("#taskPoolProjectSelect")?.value || "全部项目", pool: $("#taskPoolTypeSelect")?.value || "全部工单池" };
+  const rows = taskPoolRows.filter((row) => (activeFilters.area === "全部大区" || row.area === activeFilters.area) && (activeFilters.region === "全部区域" || row.region === activeFilters.region) && (activeFilters.project === "全部项目" || row.project === activeFilters.project) && (activeFilters.pool === "全部工单池" || row.pool === activeFilters.pool));
+  const specialtyRows = rows.filter((row) => row.pool === taskPoolPoolTypes.specialty);
+  const operationRows = rows.filter((row) => row.pool === taskPoolPoolTypes.operation);
+  const regions = Object.keys(projectRegionCatalog);
+  const projects = activeFilters.region === "全部区域" ? Object.values(projectRegionCatalog).flat() : (projectRegionCatalog[activeFilters.region] || []);
+  const lane = (title, note, laneRows) => `<section class="panel task-pool-lane"><div class="panel-head"><h2>${title}</h2><span class="muted">${note}</span></div><div class="task-pool-lane-body">${laneRows.map(taskPoolBoardRow).join("") || `<div class="empty-state">当前筛选下暂无工单</div>`}</div></section>`;
+  return `<section class="task-pool-board"><div class="panel task-pool-filter-panel"><label><span>大区</span><select id="taskPoolAreaSelect" data-task-pool-filter><option ${selectedAttr("全部大区", activeFilters.area)}>全部大区</option><option ${selectedAttr("东部大区", activeFilters.area)}>东部大区</option></select></label><label><span>区域</span><select id="taskPoolRegionSelect" data-task-pool-filter><option ${selectedAttr("全部区域", activeFilters.region)}>全部区域</option>${taskPoolOptions(regions, activeFilters.region)}</select></label><label><span>项目</span><select id="taskPoolProjectSelect" data-task-pool-filter><option ${selectedAttr("全部项目", activeFilters.project)}>全部项目</option>${taskPoolOptions(projects, activeFilters.project)}</select></label><label><span>工单池</span><select id="taskPoolTypeSelect" data-task-pool-filter><option ${selectedAttr("全部工单池", activeFilters.pool)}>全部工单池</option><option ${selectedAttr(taskPoolPoolTypes.specialty, activeFilters.pool)}>${taskPoolPoolTypes.specialty}</option><option ${selectedAttr(taskPoolPoolTypes.operation, activeFilters.pool)}>${taskPoolPoolTypes.operation}</option></select></label></div><div class="task-pool-summary-strip"><article><span>全部任务</span><strong>${rows.length}</strong></article><article><span>专业化公司工单池</span><strong>${specialtyRows.length}</strong></article><article><span>大区运营部工单池</span><strong>${operationRows.length}</strong></article><article><span>血缘关联率</span><strong>100%</strong></article></div><div class="task-pool-board-grid">${lane("专业化公司工单池", "服务目录派单与执行", specialtyRows)}${lane("大区运营部工单池", "大区角色体系派单", operationRows)}</div></section>`;
+}
+
+function renderTaskPoolDetailModal(taskId) {
+  const row = taskPoolRows.find((item) => item.id === taskId);
+  if (!row) return;
+  const lineage = [["项目需求", row.demand], ["工单池", row.pool], ["任务分类", row.lineage], ["月度任务", row.monthTask], ["任务主体", row.baseTask]];
+  $("#taskPoolDetailModal")?.remove();
+  document.body.insertAdjacentHTML("beforeend", `<div class="modal-backdrop" id="taskPoolDetailModal"><section class="task-detail-modal task-pool-detail-modal"><div class="task-pool-detail-hero"><div class="task-pool-detail-title"><span>TASK DETAIL</span><h2>${row.baseTask}</h2><p>${row.pool} · ${row.region} / ${row.project}</p></div><div class="task-pool-detail-status"><span>${row.status}</span><strong>${row.progress}%</strong><small>当前进度</small></div><button class="icon-close" data-close-task-pool-detail type="button">×</button></div><div class="task-pool-detail-progress"><i style="width:${row.progress}%"></i></div><div class="task-pool-detail-grid">${[["月度任务", row.monthTask], ["基本任务", row.baseTask], ["需求分类", row.category], ["大区", row.area], ["区域", row.region], ["项目", row.project], ["大区一级角色", row.level1], ["大区二级角色", row.level2], ["具体人员", row.person], ["现岗位", row.position], ["归属工单池", row.pool], ["任务状态", row.status]].map(([label, value]) => `<article><span>${label}</span><strong>${value}</strong></article>`).join("")}</div><div class="task-pool-detail-body"><section class="task-pool-detail-section"><h3>项目需求</h3><p>${row.demand}</p></section><section class="task-pool-detail-section"><h3>简略血缘关系图</h3><div class="task-pool-lineage-mini">${lineage.map(([label, value], index) => `<div class="task-pool-lineage-node"><b>${String(index + 1).padStart(2, "0")}</b><span>${label}</span><strong>${value}</strong></div>`).join("")}</div></section></div><div class="task-pool-detail-actions"><button class="ghost-btn" data-close-task-pool-detail type="button">关闭</button><button class="primary-btn" data-task-pool-lineage type="button">查看血缘关系索引</button></div></section></div>`);
+}
+
+function renderTaskPoolModule(item, view = "fill") {
+  const active = view === "board" ? "board" : "fill";
+  $("#moduleDetail").innerHTML = `<div class="task-pool-page"><div class="star-titlebar"><button class="ghost-btn" data-view-jump="cockpit">← 返回驾驶舱</button><h2>${item.name}</h2><div class="star-view-switch"><button class="star-view-btn ${active === "fill" ? "active" : ""}" data-task-pool-view="fill" type="button">项目端填报</button><button class="star-view-btn ${active === "board" ? "active" : ""}" data-task-pool-view="board" type="button">全部任务池看板</button></div></div><section class="task-pool-hero"><div><span>TASK POOL</span><h3>项目任务池</h3><p>项目端填报任务后，按需求分类进入双工单池，并自动关联星级年度任务血缘关系索引。</p></div><button data-task-pool-lineage type="button">任务血缘关系索引</button></section><div id="taskPoolContent">${active === "board" ? taskPoolBoardMarkup() : taskPoolFillMarkup()}</div></div>`;
 }
 
 function starTaskFilterValues(scope = "progress") {
@@ -4163,8 +4422,7 @@ function intensiveRegionTotalForType(type, rows, region, month = "5月") {
 }
 
 function intensiveRegionColumnLabel(type, regionName) {
-  if (type !== "review") return regionName;
-  return regionName.replace("区域公司", "").replace("业务区", "").replace("区域", "");
+  return regionName;
 }
 
 const intensiveRuleGroups = [
@@ -5382,7 +5640,35 @@ function specialtyInteractionCards(tasks) {
     ["review", "进度核定", "待核定", needCheck, ["复核计划偏差", "确认完成比例", "形成核定意见"]],
     ["coordinate", "事项协调", "待协调", needCoordinate, ["处理跨专业卡点", "确认资源到位", "跟踪紧急事项"]],
     ["archive", "档案库", "待归档", archiveCount, ["上传验收记录", "整理过程资料", "关闭归档清单"]],
+    ["service", "专业化公司服务评价", "待评价", 4, ["区域与项目公司评分", "六维加权综合评价", "提交大区复核确认"]],
   ];
+}
+
+const specialtyServiceEvaluationDimensions = [
+  { id: "capability", title: "专业能力", weight: 20, score: 100, desc: "问题诊断、技术方案、专业人员能力及方案可实施性" },
+  { id: "response", title: "服务响应及时性", weight: 15, score: 90, desc: "接单响应、到场服务、进度反馈及紧急需求处理" },
+  { id: "delivery", title: "交付质量", weight: 25, score: 90, desc: "工程、维修、技改或技术服务成果质量及目标达成" },
+  { id: "progress", title: "进度控制", weight: 15, score: 90, desc: "排期合理性、节点完成情况及承诺事项履行" },
+  { id: "attitude", title: "服务态度", weight: 10, score: 90, desc: "主动沟通、信息透明、协同配合及解决问题的意愿" },
+  { id: "support", title: "售后保障", weight: 15, score: 90, desc: "问题闭环、重复问题、培训移交、质保及后续支持" },
+];
+
+let activeSpecialtyServiceRegion = "济宁区域公司";
+let activeSpecialtyServiceProject = "曲阜市第二污水处理厂";
+
+function specialtyServiceRegions() {
+  return [...new Set(starTargetProjectRows.map((row) => row.region))].sort((a, b) => a.localeCompare(b, "zh-CN"));
+}
+
+function specialtyServiceProjects(region = activeSpecialtyServiceRegion) {
+  return starTargetProjectRows
+    .filter((row) => row.region === region)
+    .map((row) => row.project)
+    .sort((a, b) => a.localeCompare(b, "zh-CN"));
+}
+
+function specialtyServiceSelectMarkup(id, options, value, ariaLabel) {
+  return `<select id="${id}" aria-label="${safeText(ariaLabel)}">${options.map((option) => `<option value="${safeText(option)}" ${option === value ? "selected" : ""}>${safeText(option)}</option>`).join("")}</select>`;
 }
 
 function specialtyInteractionStats(tasks) {
@@ -5438,7 +5724,7 @@ function specialtyLedgerRows(tasks) {
       index: index + 1,
       name: task.name,
       project: task.project,
-      region: task.region.replace("区域公司", "区域"),
+      region: task.region,
       phase: phases[index % phases.length],
       progress: task.progress,
       check: task.progress >= 60 ? "是" : "否",
@@ -5654,6 +5940,8 @@ function specialtyMiniGanttMarkup(title = "AI生成工程甘特图") {
 }
 
 function specialtySubmitWorkspaceMarkup() {
+  const regions = Object.keys(projectRegionCatalog);
+  const projects = projectRegionCatalog[regions[0]] || [];
   return `
     <section class="specialty-workspace-page">
       ${specialtyWorkspaceHeaderMarkup("工程提报", "填写工程基础信息、预算方案、工程计划，并由 AI 生成可编辑甘特图。", [["待提报", "8项"], ["草稿", "3份"], ["AI生成", "可编辑"]])}
@@ -5663,8 +5951,8 @@ function specialtySubmitWorkspaceMarkup() {
           <div class="specialty-form-grid">
             ${specialtyField("工程名称", specialtyInput("请输入工程名称", "维塘自控改造工程"), true)}
             ${specialtyField("工程类别", specialtySelect(["自控工程", "技改工程", "大修重置", "日常维护维修"]), true)}
-            ${specialtyField("所属区域", specialtySelect(["杭湖区域公司", "济宁区域公司", "苏皖业务区", "北京建工环境"]), true)}
-            ${specialtyField("所属项目", specialtySelect(["湖州光正", "曲阜嘉诚", "南京荣泰", "昆山花桥"]), true)}
+            ${specialtyField("所属区域", specialtySelect(regions), true)}
+            ${specialtyField("所属项目", specialtySelect(projects), true)}
             ${specialtyField("责任人", specialtySelect(specialtyOwners), true)}
             ${specialtyField("施工负责人", specialtyInput("请输入施工负责人", "李四"), true)}
             ${specialtyField("计划开始时间", specialtyInput("2025-05-19"), true)}
@@ -5690,6 +5978,7 @@ function specialtySubmitWorkspaceMarkup() {
 }
 
 function specialtyUpdateWorkspaceMarkup() {
+  const projectOptions = specialtyTasks.slice(0, 5).map((task) => task.project);
   const tasks = [
     ["设备到货确认", "100%", "正常", "05-19 至 05-20", "王五"],
     ["控制柜安装", "90%", "正常", "05-20 至 05-22", "李四"],
@@ -5704,7 +5993,7 @@ function specialtyUpdateWorkspaceMarkup() {
         <section class="specialty-work-card">
           <div class="specialty-section-title"><i></i><h3>周度进度填报</h3></div>
           <div class="specialty-form-grid compact">
-            ${specialtyField("当前工程", specialtySelect(["维塘自控改造工程", "炼油区域改造", "河西污水厂扩容工程"]), true)}
+            ${specialtyField("当前工程", specialtySelect(projectOptions), true)}
             ${specialtyField("填报周期", specialtyInput("2025-05-19 ~ 2025-05-25（第21周）"), true)}
             ${specialtyField("本周施工日期", specialtyInput("05-19、05-20、05-21、05-22、05-23"), true)}
             ${specialtyField("当前阶段", specialtySelect(["设备安装调试阶段", "方案设计", "施工实施", "联调测试"]), true)}
@@ -5910,60 +6199,94 @@ function specialtyArchiveWorkspaceMarkup() {
   `;
 }
 
+function specialtyServiceEvaluationWorkspaceMarkup() {
+  const companies = ["维塘自控科技有限公司", "智控自动化有限公司", "华东设备服务有限公司", "清源环保技术有限公司"];
+  const regions = specialtyServiceRegions();
+  const projects = specialtyServiceProjects();
+  if (!projects.includes(activeSpecialtyServiceProject)) activeSpecialtyServiceProject = projects[0] || "";
+  return `
+    <section class="specialty-workspace-page specialty-service-evaluation-page">
+      ${specialtyWorkspaceHeaderMarkup("专业化公司服务评价", "由区域公司、项目公司对专业化公司服务过程与交付成果进行问卷评分，并提交大区复核。", [["已评价", "16份"], ["待评价", "4份"], ["平均满意度", "92.0分"]])}
+      <div class="specialty-service-layout">
+        <aside class="specialty-work-card specialty-service-object-card">
+          <div class="specialty-section-title"><i></i><h3>评价对象</h3></div>
+          <div class="specialty-service-object-list">
+            ${companies.map((company, index) => `<button class="${index === 0 ? "active" : ""}" type="button" data-specialty-action="查看${safeText(company)}评价记录"><strong>${safeText(company)}</strong><span>${index === 0 ? "本期待评价" : "已完成评价"}</span><em>${index === 0 ? "待提交" : `${90 + index}分`}</em></button>`).join("")}
+          </div>
+          <div class="specialty-history-mini"><strong>本期评价口径</strong><p>评价主体：区域公司、项目公司<br/>评价周期：2025年5月<br/>复核主体：东部大区</p></div>
+        </aside>
+        <section class="specialty-work-card specialty-service-form-card">
+          <div class="panel-head"><h3>服务评价表</h3><span class="specialty-service-form-note">请按实际服务表现填写 0 - 100 分，综合得分自动按权重折算</span></div>
+          <div class="specialty-form-grid compact specialty-service-base-fields">
+            ${specialtyField("被评价单位", specialtySelect(companies), true)}
+            ${specialtyField("评价区域", specialtyServiceSelectMarkup("specialtyServiceRegionSelect", regions, activeSpecialtyServiceRegion, "评价区域"), true)}
+            ${specialtyField("评价项目", specialtyServiceSelectMarkup("specialtyServiceProjectSelect", projects, activeSpecialtyServiceProject, "评价项目"), true)}
+            ${specialtyField("关联服务事项", specialtySelect(["自控系统安装调试服务", "PLC接线与信号联调", "SCADA画面联调服务"]), true)}
+            ${specialtyField("评价周期", specialtySelect(["2025年5月", "2025年4月"]), true)}
+          </div>
+          <div class="specialty-service-score-summary" id="specialtyServiceScoreSummary">
+            <div><span>综合得分</span><strong>92.0<small>分</small></strong></div>
+            <div><span>满意度等级</span><b>非常满意</b></div>
+            <div><span>复核状态</span><em>待大区复核</em></div>
+          </div>
+          <div class="specialty-service-dimension-table">
+            <div class="specialty-service-dimension-head"><span>评价维度</span><span>权重</span><span>重点评价内容</span><span>本次评分</span><span>补充说明（可不填）</span></div>
+            ${specialtyServiceEvaluationDimensions.map((item) => `
+              <div class="specialty-service-dimension-row">
+                <strong>${item.title}</strong>
+                <b>${item.weight}%</b>
+                <span>${item.desc}</span>
+                <label class="specialty-service-score-input"><input type="number" min="0" max="100" step="1" value="${item.score}" data-specialty-service-score data-weight="${item.weight}" aria-label="${item.title}得分" /></label>
+                <label class="specialty-service-note-input"><input type="text" maxlength="80" placeholder="可填写亮点、问题或改进建议" aria-label="${item.title}补充说明" /></label>
+              </div>
+            `).join("")}
+          </div>
+          <label class="specialty-field specialty-service-comment"><span>总体评价意见</span><textarea placeholder="请填写服务亮点、问题建议、整改要求或后续合作建议。">技术方案响应及时，现场联调配合较好；建议后续加强关键节点前的主动风险提示。</textarea></label>
+        </section>
+      </div>
+      <div class="specialty-work-actions"><button class="ghost-btn" type="button" data-specialty-action="暂存服务评价">暂存评价</button><button class="text-btn" type="button" data-specialty-action="预览评分结果">预览结果</button><button class="primary-btn" type="button" data-specialty-action="提交服务评价并发起大区复核">提交评价</button></div>
+    </section>
+  `;
+}
+
 function specialtyWorkspaceMarkup(workspace = "submit") {
   if (workspace === "submit") return specialtySubmitWorkspaceMarkup();
   if (workspace === "update") return specialtyUpdateWorkspaceMarkup();
   if (workspace === "review") return specialtyReviewWorkspaceMarkup();
   if (workspace === "coordinate") return specialtyCoordinateWorkspaceMarkup();
   if (workspace === "archive") return specialtyArchiveWorkspaceMarkup();
+  if (workspace === "service") return specialtyServiceEvaluationWorkspaceMarkup();
   return specialtyInteractionMarkup();
 }
 
 function specialtyInteractionMarkup(filters = specialtyFilterState()) {
   const tasks = specialtyFilteredTasks(filters);
-  const focusRows = tasks.filter((task) => task.status !== "已完成").slice(0, 5).map((task, index) => ({
-    title: ["完成维塘PLC接线核定", "跟进SCADA画面联调", "处理控制柜到货偏差", "提交阶段验收资料", "关闭费用协调单"][index] || task.name,
-    tag: `截止 05-${27 + index}`,
-    tone: "deadline",
-  }));
-  const coordinationRows = tasks.filter((task) => ["进行中", "预警", "逾期"].includes(task.status)).slice(0, 5).map((task, index) => ({
-    title: ["SCADA联调接口待确认", "控制柜到货延迟", "现场施工窗口冲突", "跨专业验收资料补充", "仪表点位复核异常"][index] || task.name,
-    tag: task.status === "逾期" ? "紧急" : task.status === "预警" ? "处理中" : "待协调",
-    tone: task.status === "逾期" ? "urgent" : task.status === "预警" ? "warning" : "waiting",
-    owner: task.owner,
-  }));
   return `
-    <section class="specialty-interaction-layout">
-      <div class="specialty-interaction-main">
-        <section class="specialty-workbench-card">
-          <div class="specialty-section-title"><i></i><h3>任务交互工作台</h3></div>
-          <div class="specialty-action-grid">
-            ${specialtyInteractionCards(tasks).map(([workspace, title, unit, value, matters]) => `
-              <button type="button" data-specialty-workspace="${workspace}">
-                <strong>${safeText(title)}</strong>
-                <ul>
-                  ${matters.map((matter) => `<li>${safeText(matter)}</li>`).join("")}
-                </ul>
-                <small>${safeText(unit)} <b>${value}</b> 项</small>
-              </button>
-            `).join("")}
-          </div>
-          <div class="specialty-stat-strip">
-            ${specialtyInteractionStats(tasks).map(([label, value, unit]) => `
-              <article>
-                <span>${safeText(label)}</span>
-                <strong>${value}<small>${safeText(unit)}</small></strong>
-              </article>
-            `).join("")}
-          </div>
-        </section>
-        ${specialtyInteractionWorkflowMarkup()}
-        ${specialtyInteractionTableMarkup(tasks)}
-      </div>
-      <aside class="specialty-interaction-side">
-        ${specialtySideListMarkup("本周重点事项", "⚑", focusRows)}
-        ${specialtySideListMarkup("待协调事项", "⚐", coordinationRows)}
-      </aside>
+    <section class="specialty-interaction-main">
+      <section class="specialty-workbench-card">
+        <div class="specialty-section-title"><i></i><h3>任务交互工作台</h3></div>
+        <div class="specialty-action-grid">
+          ${specialtyInteractionCards(tasks).map(([workspace, title, unit, value, matters]) => `
+            <button class="${workspace === "service" ? "specialty-service-entry" : ""}" type="button" data-specialty-workspace="${workspace}">
+              <strong>${safeText(title)}</strong>
+              <ul>
+                ${matters.map((matter) => `<li>${safeText(matter)}</li>`).join("")}
+              </ul>
+              <small>${safeText(unit)} <b>${value}</b> 项</small>
+            </button>
+          `).join("")}
+        </div>
+        <div class="specialty-stat-strip">
+          ${specialtyInteractionStats(tasks).map(([label, value, unit]) => `
+            <article>
+              <span>${safeText(label)}</span>
+              <strong>${value}<small>${safeText(unit)}</small></strong>
+            </article>
+          `).join("")}
+        </div>
+      </section>
+      ${specialtyInteractionWorkflowMarkup()}
+      ${specialtyInteractionTableMarkup(tasks)}
     </section>
   `;
 }
@@ -6001,6 +6324,20 @@ function showSpecialtyToast(message) {
   document.body.insertAdjacentHTML("beforeend", `<div class="specialty-toast" id="specialtyToast">${safeText(message)}</div>`);
   setTimeout(() => $("#specialtyToast")?.classList.add("show"), 20);
   setTimeout(() => $("#specialtyToast")?.remove(), 1800);
+}
+
+function updateSpecialtyServiceScore(root = $("#specialtyContent")) {
+  const scoreInputs = [...root.querySelectorAll("[data-specialty-service-score]")];
+  const summary = root.querySelector("#specialtyServiceScoreSummary");
+  if (!scoreInputs.length || !summary) return;
+  const score = scoreInputs.reduce((total, input) => {
+    const inputScore = Math.min(100, Math.max(0, Number(input.value) || 0));
+    return total + inputScore * (Number(input.dataset.weight) / 100);
+  }, 0);
+  const roundedScore = score.toFixed(1);
+  const level = score >= 90 ? "非常满意" : score >= 60 ? "基本满意" : "需改进";
+  summary.querySelector("strong").innerHTML = `${roundedScore}<small>分</small>`;
+  summary.querySelector("b").textContent = level;
 }
 
 function bindSpecialtyLocalActions(root = $("#specialtyContent")) {
@@ -6046,6 +6383,28 @@ function bindSpecialtyLocalActions(root = $("#specialtyContent")) {
       showSpecialtyToast(`${button.dataset.specialtyAction}已触发`);
     };
   });
+  const serviceRegionSelect = root.querySelector("#specialtyServiceRegionSelect");
+  const serviceProjectSelect = root.querySelector("#specialtyServiceProjectSelect");
+  if (serviceRegionSelect) {
+    serviceRegionSelect.onchange = () => {
+      activeSpecialtyServiceRegion = serviceRegionSelect.value;
+      activeSpecialtyServiceProject = specialtyServiceProjects(activeSpecialtyServiceRegion)[0] || "";
+      renderSpecialtyWorkspace("service");
+    };
+  }
+  if (serviceProjectSelect) {
+    serviceProjectSelect.onchange = () => {
+      activeSpecialtyServiceProject = serviceProjectSelect.value;
+    };
+  }
+  root.querySelectorAll("[data-specialty-service-score]").forEach((input) => {
+    input.oninput = () => updateSpecialtyServiceScore(root);
+    input.onchange = () => {
+      input.value = Math.min(100, Math.max(0, Number(input.value) || 0));
+      updateSpecialtyServiceScore(root);
+    };
+  });
+  updateSpecialtyServiceScore(root);
 }
 
 function renderSpecialtyCoordinateModal(itemId) {
@@ -6184,12 +6543,33 @@ function renderStarModule(item) {
       </div>
       <div id="starDashboardHeroSlot">${starDashboardHeroMarkup()}</div>
       <section class="star-metrics hide-on-dashboard-view">
-        <div class="star-score-row">
-          ${renderStarMetricCards()}
-        </div>
-        <div class="star-task-row">
-          ${renderStarTaskStatusCards()}
-        </div>
+        <section class="star-metric-group star-metric-group-stars">
+          <div class="star-metric-group-head">
+            <div><span>STAR COUNT</span><h3>星级数量</h3></div>
+            <p>量化、验收与回款三个口径的当月星星成果</p>
+          </div>
+          <div class="star-score-row star-metric-group-cards">
+            ${renderStarMetricCards(["quant", "accept", "payback"])}
+          </div>
+        </section>
+        <section class="star-metric-group star-metric-group-scores">
+          <div class="star-metric-group-head">
+            <div><span>QUALITY SCORE</span><h3>质量得分</h3></div>
+            <p>综合、运行、设备、数据四项质量评价得分</p>
+          </div>
+          <div class="star-score-row star-metric-group-cards">
+            ${renderStarMetricCards(["total", "operation", "device", "data"])}
+          </div>
+        </section>
+        <section class="star-metric-group star-metric-group-tasks">
+          <div class="star-metric-group-head">
+            <div><span>TASK DELIVERY</span><h3>年度任务</h3></div>
+            <p>任务池规模、推进状态与逾期闭环情况</p>
+          </div>
+          <div class="star-task-row star-metric-group-cards">
+            ${renderStarTaskStatusCards()}
+          </div>
+        </section>
       </section>
       <div id="starInsightContent">${starDashboardViewMarkup()}</div>
     </div>
@@ -6564,6 +6944,13 @@ function openModule(moduleId) {
     window.scrollTo({ top: 0, behavior: "smooth" });
     return;
   }
+  if (moduleId === "task-pool") {
+    renderTaskPoolModule(item);
+    $$(".nav-item").forEach((nav) => nav.classList.toggle("active", nav.dataset.module === moduleId));
+    $$(".view").forEach((view) => view.classList.toggle("active", view.id === "moduleDetail"));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    return;
+  }
   if (moduleId === "intensive") {
     renderIntensiveModule(item);
     $$(".nav-item").forEach((nav) => nav.classList.toggle("active", nav.dataset.module === moduleId));
@@ -6686,6 +7073,13 @@ function bindEvents() {
     const agentQuestion = event.target.closest("[data-agent-question]");
     const starView = event.target.closest("[data-star-view]");
     const starDashboardJump = event.target.closest("[data-star-dashboard-jump]");
+    const taskPoolView = event.target.closest("[data-task-pool-view]");
+    const taskPoolNature = event.target.closest("[data-task-pool-fill-nature]");
+    const taskPoolLineage = event.target.closest("[data-task-pool-lineage]");
+    const taskPoolDetail = event.target.closest("[data-task-pool-detail]");
+    const closeTaskPoolDetail = event.target.closest("[data-close-task-pool-detail]");
+    const taskPoolSubmit = event.target.closest("[data-task-pool-submit]");
+    const starTargetScope = event.target.closest("[data-star-target-scope]");
     const starTaskMetric = event.target.closest("[data-star-task-metric]");
     const starTaskBoardEntry = event.target.closest("[data-star-task-board-entry]");
     const starTaskBoardView = event.target.closest("[data-star-task-board-view]");
@@ -6906,8 +7300,39 @@ function bindEvents() {
       renderStarInsight(starView.dataset.starView);
       return;
     }
+    if (starTargetScope) {
+      activeStarTargetScope = starTargetScope.dataset.starTargetScope;
+      refreshStarTargetRegionMatrix();
+      return;
+    }
     if (starDashboardJump) {
       renderStarInsight(starDashboardJump.dataset.starDashboardJump);
+      return;
+    }
+    if (taskPoolView) {
+      renderTaskPoolModule(modules.find((module) => module.id === "task-pool"), taskPoolView.dataset.taskPoolView);
+      return;
+    }
+    if (taskPoolNature) {
+      $("#taskPoolContent").innerHTML = taskPoolFillMarkup(taskPoolNature.dataset.taskPoolFillNature);
+      return;
+    }
+    if (taskPoolLineage) {
+      $("#taskPoolDetailModal")?.remove();
+      openModule("star");
+      renderStarInsight("lineage");
+      return;
+    }
+    if (taskPoolDetail) {
+      renderTaskPoolDetailModal(taskPoolDetail.dataset.taskPoolDetail);
+      return;
+    }
+    if (closeTaskPoolDetail || event.target.id === "taskPoolDetailModal") {
+      $("#taskPoolDetailModal")?.remove();
+      return;
+    }
+    if (taskPoolSubmit) {
+      showSpecialtyToast("任务已提交至任务池，等待自动分派");
       return;
     }
     if (intensiveView) {
@@ -7111,6 +7536,22 @@ function bindEvents() {
       $("#starInsightContent").innerHTML = starTaskBoardMarkup(view, mode, rank, regionName);
       return;
     }
+    if (event.target.id === "starTargetDimensionSelect") {
+      activeStarTargetDimension = event.target.value;
+      refreshStarTargetRegionMatrix();
+      return;
+    }
+    if (event.target.id === "starTargetProjectRegionSelect") {
+      activeStarTargetProjectRegion = event.target.value;
+      activeStarTargetProject = "全部项目";
+      refreshStarTargetRegionMatrix();
+      return;
+    }
+    if (event.target.id === "starTargetProjectSelect") {
+      activeStarTargetProject = event.target.value;
+      refreshStarTargetRegionMatrix();
+      return;
+    }
     if (event.target.id === "projectRegionSelect") {
       updateProjectDashboard(event.target.value, "");
       return;
@@ -7135,6 +7576,35 @@ function bindEvents() {
       if (projectSelect) {
         projectSelect.innerHTML = starTaskProjects(event.target.value).map((project) => `<option>${project}</option>`).join("");
       }
+      return;
+    }
+    if (event.target.matches("[data-task-pool-filter]")) {
+      const filters = {
+        area: $("#taskPoolAreaSelect")?.value || "全部大区",
+        region: $("#taskPoolRegionSelect")?.value || "全部区域",
+        project: $("#taskPoolProjectSelect")?.value || "全部项目",
+        pool: $("#taskPoolTypeSelect")?.value || "全部工单池",
+      };
+      if (event.target.id === "taskPoolRegionSelect") filters.project = "全部项目";
+      $("#taskPoolContent").innerHTML = taskPoolBoardMarkup(filters);
+      return;
+    }
+    if (event.target.matches("[data-task-pool-role-level1]")) {
+      const activePool = $(".task-pool-nature-switch button.active")?.dataset.taskPoolFillNature || taskPoolPoolTypes.specialty;
+      const config = taskPoolFillConfig(activePool, event.target.value);
+      const level2 = $("#taskPoolLevel2Select");
+      if (level2) level2.innerHTML = taskPoolOptions(config.level2Options);
+      return;
+    }
+    if (event.target.id === "taskPoolPersonSelect") {
+      const position = $("#taskPoolPositionInput");
+      if (position) position.value = taskPoolPersonPositionMap[event.target.value] || "";
+      return;
+    }
+    if (event.target.id === "taskPoolAttachmentInput") {
+      const list = $("#taskPoolAttachmentList");
+      const files = [...event.target.files];
+      if (list) list.innerHTML = files.length ? files.map((file) => `<span>${safeText(file.name)}</span>`).join("") : "暂未选择附件";
       return;
     }
     if (event.target.matches("[data-star-task-filter='progress']")) {
@@ -7189,6 +7659,180 @@ function bindEvents() {
   });
 }
 
+function excelNameSeed(value = "") {
+  return [...String(value)].reduce((total, char) => total + char.charCodeAt(0), 0);
+}
+
+function excelNameKey(value = "") {
+  return String(value)
+    .replace(/区域公司|业务区|区域|项目公司|项目|污水处理厂|污水厂|水厂|公司|市|县|区|第[一二三四五六七八九十\d]+/g, "")
+    .replace(/[\s、,，/（）()\-]/g, "");
+}
+
+function normalizeExcelRegion(regionName = "") {
+  const regions = [...new Set(starTargetProjectRows.map((row) => row.region))];
+  const aliases = {
+    "北京望工环境": "北京建工环境",
+    "杭州区域公司": "杭湖区域公司",
+    "东营滨州区域": "东营滨州区域公司",
+    "潍坊区域": "潍坊区域公司",
+    "晋临区域": "晋临区域公司",
+    "洛阳区域": "洛阳区域公司",
+    "南阳区域": "南阳区域公司",
+    "西安区域": "西安区域公司",
+    "济宁区域": "济宁区域公司",
+    "青岛区域": "青岛区域公司",
+    "杭湖区域": "杭湖区域公司",
+    "鲁西区域": "菏泽区域公司",
+    "鲁中区域": "济南区域公司",
+    "鲁北区域": "东营滨州区域公司",
+    "鲁南区域": "枣庄区域公司",
+    "苏皖区域": "苏皖业务区",
+  };
+  if (regions.includes(regionName)) return regionName;
+  if (aliases[regionName]) return aliases[regionName];
+  const sourceKey = excelNameKey(regionName);
+  return regions.find((region) => excelNameKey(region) === sourceKey || excelNameKey(region).includes(sourceKey) || sourceKey.includes(excelNameKey(region))) || regions[0];
+}
+
+function normalizeExcelProject(regionName, projectName = "", seed = "") {
+  const region = normalizeExcelRegion(regionName);
+  const candidates = starTargetProjectRows.filter((row) => row.region === region);
+  if (!candidates.length) return projectName;
+  if (candidates.some((row) => row.project === projectName)) return projectName;
+
+  const sourceKey = excelNameKey(projectName);
+  const scored = candidates.map((row) => {
+    const candidateKey = excelNameKey(row.project);
+    const sharedChars = [...new Set(sourceKey)].filter((char) => candidateKey.includes(char)).length;
+    const exactish = sourceKey && (candidateKey.includes(sourceKey) || sourceKey.includes(candidateKey)) ? 100 : 0;
+    return { row, score: exactish + sharedChars };
+  }).sort((a, b) => b.score - a.score || a.row.project.localeCompare(b.row.project, "zh-CN"));
+
+  if (scored[0].score >= 2) return scored[0].row.project;
+  return candidates[excelNameSeed(`${seed}-${projectName}`) % candidates.length].project;
+}
+
+function normalizeExcelEntity(row, seed = "") {
+  if (!row || !row.region) return row;
+  row.region = normalizeExcelRegion(row.region);
+  if (row.project) row.project = normalizeExcelProject(row.region, row.project, seed || row.id || row.name);
+  return row;
+}
+
+function normalizeExcelNames() {
+  if (!starTargetProjectRows.length) return;
+
+  const catalog = starTargetProjectRows.reduce((groups, row) => {
+    (groups[row.region] ||= []).push(row.project);
+    return groups;
+  }, {});
+  Object.keys(projectRegionCatalog).forEach((key) => delete projectRegionCatalog[key]);
+  Object.entries(catalog).forEach(([region, projects]) => {
+    projectRegionCatalog[region] = [...projects].sort((a, b) => a.localeCompare(b, "zh-CN"));
+  });
+
+  [
+    regionRankingRows,
+    areaBulletinRows,
+    projectActualRows,
+    specialtyTasks,
+    starTaskWorkflowRows,
+    taskPoolRows,
+    supervisionReportRows,
+    automationRegionBoardRows,
+  ].forEach((rows) => {
+    rows.forEach((row, index) => normalizeExcelEntity(row, `${index}-${row.id || "row"}`));
+  });
+  starTaskWorkflowRows.forEach((row) => {
+    row.name = `${row.project}${row.type ? ` · ${row.type}` : ""}`;
+  });
+  starTargetRows.filter((row) => row.scope === "region").forEach((row) => {
+    row.name = normalizeExcelRegion(row.name);
+  });
+
+  const intensiveProjectAliases = new Map();
+  Object.values(intensiveProjectRows).forEach((rows) => {
+    rows.forEach((row, index) => {
+      if (!row.region) return;
+      const originalProject = row.project;
+      normalizeExcelEntity(row, `intensive-project-${index}`);
+      intensiveProjectAliases.set(originalProject, row.project);
+      row.shortName = row.project;
+    });
+  });
+  Object.values(intensiveProjectRows).forEach((rows) => {
+    rows.forEach((row) => {
+      if (!row.region && row.project) row.project = intensiveProjectAliases.get(row.project) || row.project;
+    });
+  });
+  Object.values(window.INTENSIVE_TASK_SOURCE || {}).forEach((rows) => {
+    rows.forEach((row, index) => normalizeExcelEntity(row, `intensive-task-${index}`));
+  });
+
+  automationJuneRows.forEach((row, index) => {
+    if (!row.region) return;
+    row.region = normalizeExcelRegion(row.region);
+    const project = normalizeExcelProject(row.region, row.project || row.factory, `automation-june-${index}`);
+    row.project = project;
+    if (row.factory) row.factory = project;
+    if (row.fullName) row.fullName = project;
+  });
+  automationRegionBoardRows.forEach((row, index) => {
+    if (!row.region) return;
+    row.region = normalizeExcelRegion(row.region);
+    const project = normalizeExcelProject(row.region, row.project || row.factory, `automation-board-${index}`);
+    row.project = project;
+    if (row.factory) row.factory = project;
+  });
+
+  annualStarProjects.forEach((row, index) => {
+    row.owner = normalizeExcelRegion(row.owner);
+    row.name = normalizeExcelProject(row.owner, row.name, `annual-star-${index}`);
+  });
+  starProjects.forEach((row, index) => {
+    const source = starTargetProjectRows[index % starTargetProjectRows.length];
+    const suffix = row.name.includes("复核") ? "星级复核任务" : row.name.includes("设备") ? "星级设备更新" : "年度星级任务";
+    row.owner = source.region;
+    row.name = `${source.project}-${suffix}`;
+  });
+  permissionRows.filter((row) => row.level === "项目").forEach((row, index) => {
+    row.unit = starTargetProjectRows[(index * 13) % starTargetProjectRows.length].project;
+  });
+}
+
+function standardizeTextInputHints(root = document) {
+  const selector = 'input:not([type]), input[type="text"], input[type="search"], input[type="email"], input[type="tel"], input[type="url"], textarea';
+  const controls = [
+    ...(root instanceof Element && root.matches(selector) ? [root] : []),
+    ...(root.querySelectorAll ? root.querySelectorAll(selector) : []),
+  ];
+
+  controls.forEach((control) => {
+    if (control.dataset.hintStandardized || control.readOnly || control.matches("[data-star-task-filter]")) return;
+    const example = control.value.trim();
+    if (example) {
+      control.placeholder = example;
+      control.value = "";
+    }
+    control.dataset.hintStandardized = "true";
+  });
+}
+
+function observeTextInputHints() {
+  standardizeTextInputHints();
+  const observer = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+      mutation.addedNodes.forEach((node) => {
+        if (node.nodeType === Node.ELEMENT_NODE) standardizeTextInputHints(node);
+      });
+    });
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+}
+
+normalizeExcelNames();
 renderNavigation();
 renderCards();
 bindEvents();
+observeTextInputHints();
